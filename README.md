@@ -8,7 +8,7 @@
     - [x] Integers
     - [ ] Floats
     - [ ] Strings
-- [x] Immutable variables
+- [x] Mutable variables
 - [x] Binary operations/expressions
 - [ ] Conditional statements/closures
 - [ ] Functions
@@ -34,7 +34,7 @@ Variables can be set using the `let` keyword as follows:
 let foo = 1
 ```
 
-Variables are constant, meaning they cannot be mutated or redeclared after definition.
+They are always mutable.
 
 ## Running 
 
