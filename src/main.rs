@@ -5,33 +5,53 @@ mod lexer;
 mod parser;
 mod util;
 
-use std::io::{self, Write};
+use std::{
+    fs::read_to_string,
+    io::{self, Write},
+};
 
 use crate::{environment::Env, interpreter::eval, parser::Parser};
 
+use clap::Parser as clap_Parser;
+
+#[derive(clap_Parser)]
+struct Args {
+    path: Option<String>,
+}
+
 fn main() {
+    let args = Args::parse();
+
     let mut env = Env::new();
-    let _ = env.declare("pi".to_string(), 3);
 
-    loop {
-        print!(">: ");
-        io::stdout().flush().unwrap();
+    let mut result = |contents: String| {
+        let program = Parser::new()
+            .produce_ast(contents)
+            .expect("Should have been able to parse program");
+        let result = eval(program, &mut env);
+        match result {
+            Ok(result) => format!("{}", result),
+            Err(reason) => format!("{}", reason),
+        }
+    };
 
-        let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("Failed to read input");
+    if let Some(path) = args.path {
+        let contents = read_to_string(path).expect("Could not read file from specified path");
+        println!("{}", result(contents))
+    } else {
+        loop {
+            print!(">: ");
 
-        println!("Input: {}", input);
+            io::stdout().flush().unwrap();
 
-        let Ok(program) = Parser::new().produce_ast(input.chars().collect::<String>()) else {
-            panic!("Error parsing program");
-        };
+            let mut contents = String::new();
+            io::stdin()
+                .read_line(&mut contents)
+                .expect("Failed to read input");
 
-        let Ok(result) = eval(program, &mut env) else {
-            panic!("Error evaluating program")
-        };
+            println!("Input: {}", contents);
 
-        dbg!(result);
+            println!("{}", result(contents))
+        }
     }
 }
