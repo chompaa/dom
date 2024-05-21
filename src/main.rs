@@ -5,16 +5,16 @@ mod lexer;
 mod parser;
 mod util;
 
+use crate::{environment::Env, interpreter::eval, parser::Parser};
+
 use std::{
     fs::read_to_string,
     io::{self, Write},
 };
 
-use crate::{environment::Env, interpreter::eval, parser::Parser};
+use clap::Parser as _;
 
-use clap::Parser as clap_Parser;
-
-#[derive(clap_Parser)]
+#[derive(clap::Parser)]
 struct Args {
     path: Option<String>,
 }
