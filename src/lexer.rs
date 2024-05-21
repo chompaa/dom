@@ -1,4 +1,12 @@
+use thiserror::Error;
+
 use crate::util::is_alpha;
+
+#[derive(Error, Debug)]
+pub enum LexerError {
+    #[error("token `{0}` is invalid")]
+    InvalidToken(char),
+}
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub(crate) enum BinaryOp {
@@ -47,19 +55,15 @@ impl Lexer {
     }
 
     /// Tokenizes the current buffer.
-    pub fn tokenize(&mut self) -> Result<Vec<Token>, Vec<Token>> {
+    pub fn tokenize(&mut self) -> Result<Vec<Token>, LexerError> {
         let mut tokens: Vec<Token> = vec![];
 
         loop {
-            if let Ok(token) = self.next() {
-                if token == Token::EndOfFile {
-                    break;
-                }
-                tokens.push(token);
-            } else {
-                // An invalid token was encountered
-                return Err(tokens);
+            let token = self.next()?;
+            if token == Token::EndOfFile {
+                break;
             }
+            tokens.push(token);
         }
 
         Ok(tokens)
@@ -129,7 +133,7 @@ impl Lexer {
     }
 
     /// Tokenizes the current character(s) and advances the cursor.
-    fn next(&mut self) -> Result<Token, ()> {
+    fn next(&mut self) -> Result<Token, LexerError> {
         self.consume_whitespace();
 
         let token = match self.ch {
@@ -153,7 +157,7 @@ impl Lexer {
                 } else if self.ch.is_ascii_digit() {
                     Token::Int(self.read_number())
                 } else {
-                    return Err(());
+                    return Err(LexerError::InvalidToken(self.ch));
                 }
             }
         };

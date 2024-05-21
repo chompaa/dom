@@ -27,7 +27,8 @@ impl Parser {
         let mut body = vec![];
         while let Some(token) = self.tokens.front() {
             if *token == Token::EndOfLine {
-                break;
+                self.consume();
+                continue;
             }
             body.push(self.parse_stmt());
         }
@@ -172,7 +173,7 @@ impl Parser {
             Token::Int(value) => Expr::Int(
                 value
                     .parse::<i32>()
-                    .expect("Int token should be parsed as an `i32`"),
+                    .expect("`Int` token should be parsed as an `i32`"),
             ),
             Token::LeftParen => {
                 let expr = self.parse_expr();

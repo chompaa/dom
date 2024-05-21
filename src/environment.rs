@@ -1,7 +1,17 @@
 //! Environment for storing and looking up variables.
 
+use thiserror::Error;
+
 use crate::interpreter::Val;
 use std::collections::HashMap;
+
+#[derive(Error, Debug)]
+pub enum EnvError {
+    #[error("identifier `{0}` cannot be redeclared")]
+    Duplicate(String),
+    #[error("identifier `{0}` used without declaration")]
+    Declaration(String),
+}
 
 /// An environment for storing and looking up variables.
 pub struct Env {
@@ -31,10 +41,10 @@ impl Env {
     /// Declares a new variable with the given name and value.
     ///
     /// Returns an error if a variable with the same name already exists in this environment.
-    pub fn declare(&mut self, name: String, value: Val) -> Result<Val, ()> {
+    pub fn declare(&mut self, name: String, value: Val) -> Result<Val, EnvError> {
         // Check if a variable with the same name already exists in this environment.
         if self.values.contains_key(&name) {
-            return Err(());
+            return Err(EnvError::Duplicate(name));
         }
 
         self.values.insert(name, value);
@@ -45,7 +55,7 @@ impl Env {
     /// Assigns a new value to the variable with the given name.
     ///
     /// Returns an error if no variable with the given name exists in this environment or its parents.
-    pub fn assign(&mut self, name: String, value: Val) -> Result<Val, ()> {
+    pub fn assign(&mut self, name: String, value: Val) -> Result<Val, EnvError> {
         // Find the environment where the variable is declared.
         let env = self.resolve_mut(&name)?;
 
@@ -57,20 +67,20 @@ impl Env {
     /// Looks up the value of the variable with the given name.
     ///
     /// Returns an error if no variable with the given name exists in this environment or its parents.
-    pub fn lookup(&self, name: String) -> Result<Val, ()> {
+    pub fn lookup(&self, name: String) -> Result<Val, EnvError> {
         // Find the environment where the variable is declared.
         let env = self.resolve(&name)?;
 
-        // Get the value of the variable from the environment.
-        let Some(value) = env.values.get(&name) else {
-            return Err(());
-        };
+        let value = env
+            .values
+            .get(&name)
+            .expect("Environment should contain identifier");
 
         Ok(*value)
     }
 
     /// Resolves the environment that contains the variable with the given name.
-    fn resolve(&self, name: &str) -> Result<&Env, ()> {
+    fn resolve(&self, name: &str) -> Result<&Env, EnvError> {
         if self.values.contains_key(name) {
             return Ok(self);
         }
@@ -79,11 +89,11 @@ impl Env {
             return parent.resolve(name);
         }
 
-        Err(())
+        Err(EnvError::Declaration(name.to_string()))
     }
 
     /// Resolves the mutable environment that contains the variable with the given name.
-    fn resolve_mut(&mut self, name: &str) -> Result<&mut Env, ()> {
+    fn resolve_mut(&mut self, name: &str) -> Result<&mut Env, EnvError> {
         // If the variable is declared in this environment, return this environment.
         if self.values.contains_key(name) {
             return Ok(self);
@@ -95,6 +105,6 @@ impl Env {
         }
 
         // If no environment contains the variable, return an error.
-        Err(())
+        Err(EnvError::Declaration(name.to_string()))
     }
 }
