@@ -9,7 +9,7 @@ pub enum LexerError {
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
-pub(crate) enum BinaryOp {
+pub enum BinaryOp {
     Add,
     Sub,
     Mul,
@@ -17,7 +17,7 @@ pub(crate) enum BinaryOp {
 }
 
 #[derive(PartialEq, Debug)]
-pub(crate) enum Token {
+pub enum Token {
     // Literals
     Ident(String),
     Int(String),

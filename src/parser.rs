@@ -14,18 +14,18 @@ use std::i32;
 use crate::ast::{Expr, Func, Ident, Stmt, Var};
 use crate::lexer::{BinaryOp, Lexer, Token};
 
-pub(crate) struct Parser {
+pub struct Parser {
     tokens: VecDeque<Token>,
 }
 
 impl Parser {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             tokens: vec![].into(),
         }
     }
 
-    pub(crate) fn produce_ast(&mut self, source: String) -> Result<Stmt, ()> {
+    pub fn produce_ast(&mut self, source: String) -> Result<Stmt, ()> {
         // Retrieve tokens from the lexer
         let mut lexer = Lexer::new(source);
 
@@ -258,10 +258,6 @@ impl Parser {
 
         if self.peek() == Some(&Token::LeftParen) {
             self.consume();
-
-            // let Expr::Ident(ident) = left else {
-            //     panic!("Caller should be an identifier");
-            // };
 
             return Expr::Call {
                 caller: Box::new(left),

@@ -1,34 +1,11 @@
 use crate::lexer::BinaryOp;
 
-/// A statement in the abstract syntax tree.
-// #[derive(Debug, Clone)]
-// pub(crate) struct Stmt {
-//     /// The kind of statement.
-//     pub(crate) kind: StmtKind,
-// }
-//
-// impl Stmt {
-//     /// Creates a new statement with the given kind.
-//     pub(crate) fn new(kind: StmtKind) -> Self {
-//         Self { kind }
-//     }
-// }
-//
-// impl From<Expr> for Stmt {
-//     /// Converts an expression into a statement.
-//     fn from(expr: Expr) -> Self {
-//         Stmt {
-//             kind: StmtKind::Expr(expr.into()),
-//         }
-//     }
-// }
-
 /// An identifier (e.g. a variable name).
 pub type Ident = String;
 
 /// The kind of a statement.
 #[derive(Debug, Clone)]
-pub(crate) enum Stmt {
+pub enum Stmt {
     /// A program consisting of a sequence of statements.
     Program {
         body: Vec<Stmt>,
@@ -70,7 +47,7 @@ pub struct Var {
 
 /// An expression in the abstract syntax tree.
 #[derive(Debug, Clone)]
-pub(crate) enum Expr {
+pub enum Expr {
     /// An assignment expression.
     Assignment {
         /// The assignee (left-hand side) of the assignment.
