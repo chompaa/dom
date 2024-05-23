@@ -24,12 +24,16 @@ pub(crate) enum Token {
 
     // Keywords
     Let,
+    Func,
 
     // Grouping Operators
     BinaryOp(BinaryOp),
     Assignment,
+    Separator,
     LeftParen,
     RightParen,
+    LeftBrace,
+    RightBrace,
     EndOfLine,
     EndOfFile,
 }
@@ -139,18 +143,22 @@ impl Lexer {
         let token = match self.ch {
             '\0' => Token::EndOfFile,
             '=' => Token::Assignment,
+            ',' => Token::Separator,
             '+' => Token::BinaryOp(BinaryOp::Add),
             '-' => Token::BinaryOp(BinaryOp::Sub),
             '*' => Token::BinaryOp(BinaryOp::Mul),
             '/' => Token::BinaryOp(BinaryOp::Div),
             '(' => Token::LeftParen,
             ')' => Token::RightParen,
+            '{' => Token::LeftBrace,
+            '}' => Token::RightBrace,
             '\n' => Token::EndOfLine,
             _ => {
                 if is_alpha(self.ch) {
                     let ident = self.read_ident();
 
                     match ident.as_str() {
+                        "fn" => Token::Func,
                         "let" => Token::Let,
                         _ => Token::Ident(ident),
                     }

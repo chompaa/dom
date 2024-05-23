@@ -1,7 +1,17 @@
+//! Parser used to produce an AST from a token stream
+//!
+//! Order of precedence:
+//! - Assignment
+//! - Block
+//! - Addition
+//! - Multiplication
+//! - Call
+//! - Primary
+
 use std::collections::VecDeque;
 use std::i32;
 
-use crate::ast::{Expr, Stmt, StmtKind, Var};
+use crate::ast::{Expr, Func, Ident, Stmt, StmtKind, Var};
 use crate::lexer::{BinaryOp, Lexer, Token};
 
 pub(crate) struct Parser {
@@ -18,6 +28,7 @@ impl Parser {
     pub(crate) fn produce_ast(&mut self, source: String) -> Result<Stmt, ()> {
         // Retrieve tokens from the lexer
         let mut lexer = Lexer::new(source);
+
         let Ok(tokens) = lexer.tokenize() else {
             return Err(());
         };
@@ -52,18 +63,95 @@ impl Parser {
         };
 
         let stmt = match token {
-            Token::Let => {
-                // Consume the `let` keyword
-                self.consume();
-                StmtKind::Var(self.parse_var())
-            }
+            Token::Func => StmtKind::Func(self.parse_func()),
+            Token::Let => StmtKind::Var(self.parse_var()),
             _ => StmtKind::Expr(self.parse_expr()),
         };
 
         Stmt::new(stmt)
     }
 
+    fn parse_func(&mut self) -> Func {
+        // TODO: Panics -> Results
+
+        // Consume the `fn` keyword
+        self.consume();
+
+        let Token::Ident(ident) = self.consume() else {
+            panic!("Expected identifier name following `fn` keyword");
+        };
+
+        if self.consume() != Token::LeftParen {
+            panic!("Expected open parenthesis");
+        }
+
+        let params: Result<Vec<Ident>, ()> = self
+            .parse_args()
+            .into_iter()
+            .map(|expr| match expr {
+                Expr::Ident(ident) => Ok(ident),
+                _ => Err(()),
+            })
+            .collect();
+
+        let Ok(params) = params else {
+            panic!("Expected identifiers in function arguments");
+        };
+
+        if Token::LeftBrace != self.consume() {
+            panic!("Expected block following function declaration");
+        }
+
+        let mut body = vec![];
+        while let Some(token) = self.tokens.front() {
+            match *token {
+                Token::RightBrace => break,
+                Token::EndOfLine => {
+                    self.consume();
+                }
+                _ => body.push(self.parse_stmt()),
+            };
+        }
+
+        if Token::RightBrace != self.consume() {
+            panic!("Expected closure at end of block");
+        }
+
+        Func {
+            ident,
+            params,
+            body,
+        }
+    }
+
+    fn parse_args(&mut self) -> Vec<Expr> {
+        let mut args = Vec::new();
+
+        if self.peek() == Some(&Token::RightParen) {
+            self.consume();
+            return args;
+        }
+
+        // First argument won't be preceded by a separator
+        args.push(self.parse_assignment_expr());
+
+        // Get all separated arguments
+        while self.peek() == Some(&Token::Separator) {
+            self.consume();
+            args.push(self.parse_assignment_expr())
+        }
+
+        if self.consume() != Token::RightParen {
+            panic!("Expected close parenthesis");
+        }
+
+        args
+    }
+
     fn parse_var(&mut self) -> Var {
+        // Consume the `let` keyword
+        self.consume();
+
         let Token::Ident(ident) = self.consume() else {
             panic!("Expected identifier name following `let` keyword");
         };
@@ -136,7 +224,7 @@ impl Parser {
     }
 
     fn parse_multiplicative_expr(&mut self) -> Expr {
-        let mut left = self.parse_primary_expr();
+        let mut left = self.parse_call_expr();
 
         loop {
             let Some(token) = self.peek() else {
@@ -160,6 +248,25 @@ impl Parser {
                 right: Box::new(right),
                 op,
             }
+        }
+
+        left
+    }
+
+    fn parse_call_expr(&mut self) -> Expr {
+        let left = self.parse_primary_expr();
+
+        if self.peek() == Some(&Token::LeftParen) {
+            self.consume();
+
+            // let Expr::Ident(ident) = left else {
+            //     panic!("Caller should be an identifier");
+            // };
+
+            return Expr::Call {
+                caller: Box::new(left),
+                args: self.parse_args(),
+            };
         }
 
         left

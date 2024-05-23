@@ -1,0 +1,5 @@
+fn sum(a, b) {
+  a + b
+}
+let s = sum(2, 2)
+s

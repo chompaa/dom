@@ -13,6 +13,7 @@ use std::{
 };
 
 use clap::Parser as _;
+use environment::Val;
 
 #[derive(clap::Parser)]
 struct Args {
@@ -30,7 +31,15 @@ fn main() {
             .expect("Should have been able to parse program");
         let result = eval(program, &mut env);
         match result {
-            Ok(result) => format!("{}", result),
+            Ok(result) => match result {
+                Val::Int(number) => format!("{}", number),
+                Val::Func {
+                    ident,
+                    params,
+                    body,
+                    env,
+                } => format!("{ident}, {:?}, {:?}, {:?}", params, body, env),
+            },
             Err(reason) => format!("{}", reason),
         }
     };

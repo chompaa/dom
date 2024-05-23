@@ -1,7 +1,7 @@
 use crate::lexer::BinaryOp;
 
 /// A statement in the abstract syntax tree.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Stmt {
     /// The kind of statement.
     pub(crate) kind: StmtKind,
@@ -23,22 +23,37 @@ impl From<Expr> for Stmt {
     }
 }
 
+/// An identifier (e.g. a variable name).
+pub type Ident = String;
+
 /// The kind of a statement.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum StmtKind {
     /// A program consisting of a sequence of statements.
-    Program { body: Vec<Stmt> },
+    Program {
+        body: Vec<Stmt>,
+    },
+    // A callable function.
+    Func(Func),
     /// A variable declaration.
     Var(Var),
     /// An expression statement.
     Expr(Expr),
 }
 
-/// An identifier (e.g. a variable name).
-pub type Ident = String;
+/// A function declaration.
+#[derive(Debug, Clone)]
+pub struct Func {
+    /// The identifier of the function.
+    pub ident: Ident,
+    /// The parameters of the function.
+    pub params: Vec<Ident>,
+    /// The body of the function.
+    pub body: Vec<Stmt>,
+}
 
 /// A variable declaration.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Var {
     /// The identifier of the variable.
     pub ident: Ident,
@@ -47,7 +62,7 @@ pub struct Var {
 }
 
 /// An expression in the abstract syntax tree.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum Expr {
     /// An assignment expression.
     Assignment {
@@ -55,6 +70,10 @@ pub(crate) enum Expr {
         assignee: Box<Expr>,
         /// The value (right-hand side) of the assignment.
         value: Box<Expr>,
+    },
+    Call {
+        caller: Box<Expr>,
+        args: Vec<Expr>,
     },
     /// An identifier expression.
     Ident(Ident),

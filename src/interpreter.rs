@@ -1,27 +1,34 @@
 use thiserror::Error;
 
 use crate::{
-    ast::{Expr, Ident, Stmt, StmtKind, Var},
-    environment::Env,
+    ast::{Expr, Func, Ident, Stmt, StmtKind, Var},
+    environment::{Env, Val},
     lexer::BinaryOp,
 };
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-pub type Val = i32;
 
 #[derive(Error, Debug)]
 pub enum InterpreterError {
     #[error("missing identifier in assignment")]
     Assignment,
+    #[error("binary expressions can only contain integers or references to integers")]
+    Binary,
+    #[error("could not interpret arguments")]
+    Args,
+    #[error("caller is not a defined function")]
+    Caller,
 }
 
 pub fn eval(statement: Stmt, env: &mut Env) -> Result<Val> {
     match statement.kind {
         StmtKind::Program { body } => eval_program(body, env),
+        StmtKind::Func(func) => eval_func(func, env),
         StmtKind::Var(var) => eval_var(var, env),
         StmtKind::Expr(expr) => match expr {
             Expr::Assignment { assignee, value } => eval_assign(*assignee, *value, env),
-            Expr::Int(number) => Ok(number),
+            Expr::Call { caller, args } => eval_call(*caller, args, env),
+            Expr::Int(number) => Ok(Val::Int(number)),
             Expr::BinaryOp { left, right, op } => eval_binary_expr(*left, *right, op, env),
             Expr::Ident(ident) => eval_ident(ident, env),
         },
@@ -35,7 +42,7 @@ fn eval_program(body: Vec<Stmt>, env: &mut Env) -> Result<Val> {
         .expect("Last value from program body should be obtainable")
 }
 
-fn eval_numeric_binary_expr(lhs: Val, rhs: Val, op: BinaryOp) -> Result<Val> {
+fn eval_numeric_binary_expr(lhs: i32, rhs: i32, op: BinaryOp) -> Result<Val> {
     let res = match op {
         BinaryOp::Add => lhs + rhs,
         BinaryOp::Sub => lhs - rhs,
@@ -43,12 +50,17 @@ fn eval_numeric_binary_expr(lhs: Val, rhs: Val, op: BinaryOp) -> Result<Val> {
         BinaryOp::Div => lhs / rhs,
     };
 
-    Ok(res)
+    Ok(Val::Int(res))
 }
 
 fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &mut Env) -> Result<Val> {
     let lhs = eval(left.into(), env)?;
     let rhs = eval(right.into(), env)?;
+
+    let (lhs, rhs) = match (lhs, rhs) {
+        (Val::Int(lhs), Val::Int(rhs)) => (lhs, rhs),
+        _ => return Err(Box::new(InterpreterError::Binary)),
+    };
 
     eval_numeric_binary_expr(lhs, rhs, op)
 }
@@ -56,6 +68,22 @@ fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &mut Env) -> Res
 fn eval_ident(ident: Ident, env: &mut Env) -> Result<Val> {
     let val = env.lookup(ident)?;
     Ok(val)
+}
+
+fn eval_func(func: Func, env: &mut Env) -> Result<Val> {
+    let ident = &func.ident;
+
+    let func = Val::Func {
+        ident: ident.to_owned(),
+        params: func.params,
+        body: func.body,
+        // TODO: Remove this clone
+        env: Env::with_parent(env.clone()),
+    };
+
+    let result = env.declare(ident.to_owned(), func);
+
+    Ok(result?)
 }
 
 fn eval_var(var: Var, env: &mut Env) -> Result<Val> {
@@ -72,4 +100,32 @@ fn eval_assign(assignee: Expr, value: Expr, env: &mut Env) -> Result<Val> {
     let value = eval(value.into(), env)?;
     let result = env.assign(assignee, value)?;
     Ok(result)
+}
+
+fn eval_call(caller: Expr, args: Vec<Expr>, env: &mut Env) -> Result<Val> {
+    let Ok(args): Result<Vec<Val>> = args
+        .into_iter()
+        .map(|arg| eval(Stmt::new(StmtKind::Expr(arg)), env))
+        .collect()
+    else {
+        return Err(Box::new(InterpreterError::Args));
+    };
+
+    let Val::Func {
+        params, body, env, ..
+    } = eval(Stmt::new(StmtKind::Expr(caller)), env)?
+    else {
+        return Err(Box::new(InterpreterError::Caller));
+    };
+
+    let mut env = env;
+
+    for (param, arg) in params.into_iter().zip(args.into_iter()) {
+        env.declare(param, arg)?;
+    }
+
+    body.into_iter()
+        .map(|stmt| eval(stmt, &mut env))
+        .last()
+        .expect("Last value from program body should be obtainable")
 }

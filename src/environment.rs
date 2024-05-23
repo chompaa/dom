@@ -2,8 +2,9 @@
 
 use thiserror::Error;
 
-use crate::interpreter::Val;
 use std::collections::HashMap;
+
+use crate::ast::{Ident, Stmt};
 
 #[derive(Error, Debug)]
 pub enum EnvError {
@@ -13,7 +14,19 @@ pub enum EnvError {
     Declaration(String),
 }
 
+#[derive(Debug, Clone)]
+pub enum Val {
+    Int(i32),
+    Func {
+        ident: Ident,
+        params: Vec<Ident>,
+        body: Vec<Stmt>,
+        env: Env,
+    },
+}
+
 /// An environment for storing and looking up variables.
+#[derive(Debug, Clone)]
 pub struct Env {
     /// The parent environment, if any.
     parent: Option<Box<Env>>,
@@ -31,7 +44,7 @@ impl Env {
     }
 
     /// Creates a new environment with the given parent environment.
-    pub fn from_parent(parent: Env) -> Self {
+    pub fn with_parent(parent: Env) -> Self {
         Self {
             parent: Some(Box::new(parent)),
             values: HashMap::new(),
@@ -47,7 +60,7 @@ impl Env {
             return Err(EnvError::Duplicate(name));
         }
 
-        self.values.insert(name, value);
+        self.values.insert(name, value.clone());
 
         Ok(value)
     }
@@ -59,7 +72,7 @@ impl Env {
         // Find the environment where the variable is declared.
         let env = self.resolve_mut(&name)?;
 
-        env.values.insert(name, value);
+        env.values.insert(name, value.clone());
 
         Ok(value)
     }
@@ -76,7 +89,7 @@ impl Env {
             .get(&name)
             .expect("Environment should contain identifier");
 
-        Ok(*value)
+        Ok(value.clone())
     }
 
     /// Resolves the environment that contains the variable with the given name.
