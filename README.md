@@ -11,7 +11,7 @@
 - [x] Mutable variables
 - [x] Binary operations/expressions
 - [ ] Conditional statements/closures
-- [ ] Functions
+- [x] Functions
 - [ ] Loops
 
 ## Syntax
@@ -36,22 +36,43 @@ let foo = 1
 
 They are always mutable.
 
-## Running 
+### Functions
 
-> [!NOTE]
-> This language is barebones at the moment. As such, there is a usable shell to test syntax, but no support for file reading.
+Functions are defined using the `fn` keyword as follows:
+
+```rs
+fn sum(a, b) {
+    a + b
+}
+```
+
+They always return the last evaluated expression (there is no way to return early, yet). They are called as you may expect:
+
+```rs
+sum(1, 1)
+```
+
+Arguments are always passed by value, for now.
+
+## Running 
 
 Make sure you have the Rust toolchain installed.
 
-1. Clone this repository:
+- Clone this repository and navigate to it:
 
 ```sh
-git clone https://github.com/chompaa/dom
+git clone https://github.com/chompaa/dom && cd dom
 ```
 
-2. Run:
+- To start the interactive shell:
 
 ```sh
 cargo run
+```
+
+- To interpret a file:
+
+```sh
+cargo run -- <file>
 ```
 
