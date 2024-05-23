@@ -11,27 +11,57 @@
 use std::collections::VecDeque;
 use std::i32;
 
+use thiserror::Error;
+
 use crate::ast::{Expr, Func, Ident, Stmt, Var};
 use crate::lexer::{BinaryOp, Lexer, Token};
 
+#[derive(Error, Debug)]
+pub enum ParserError {
+    #[error("expected identifier following `fn` keyword")]
+    FnIdentifier,
+    #[error("expected left parenthesis '(' following function declaration")]
+    FnArgsBegin,
+    #[error("expected identifiers in function arguments")]
+    FnArgs,
+    #[error("expected right parenthesis ')' to end argument list")]
+    FnArgsEnd,
+    #[error("expected left brace '{{' following function arguments")]
+    FnBlockBegin,
+    #[error("expected right brace '}}' to end function block")]
+    FnBlockEnd,
+    #[error("expected identifier following `let` keyword")]
+    VarIdentifier,
+    #[error("expected assignment operator '=' following identifier in variable declaration")]
+    VarAssign,
+    #[error("expected newline '\\n' at end of variable declaration")]
+    VarEndOfLine,
+    #[error("token {0:?} is unsupported")]
+    Unsupported(Token),
+}
+
 pub struct Parser {
+    line: u32,
     tokens: VecDeque<Token>,
 }
 
 impl Parser {
     pub fn new() -> Self {
         Self {
+            line: 1,
             tokens: vec![].into(),
         }
     }
 
-    pub fn produce_ast(&mut self, source: String) -> Result<Stmt, ()> {
+    pub fn line(&self) -> u32 {
+        self.line
+    }
+
+    pub fn produce_ast(&mut self, source: String) -> Result<Stmt, Box<dyn std::error::Error>> {
         // Retrieve tokens from the lexer
         let mut lexer = Lexer::new(source);
 
-        let Ok(tokens) = lexer.tokenize() else {
-            return Err(());
-        };
+        let tokens = lexer.tokenize()?;
         self.tokens = tokens.into();
 
         // Build out the program body
@@ -41,7 +71,7 @@ impl Parser {
                 self.consume();
                 continue;
             }
-            body.push(self.parse_stmt());
+            body.push(self.parse_stmt()?);
         }
 
         // Return the program
@@ -54,39 +84,55 @@ impl Parser {
     }
 
     fn consume(&mut self) -> Token {
-        self.tokens.pop_front().expect("Tokens should not be empty")
+        let token = self.tokens.pop_front().expect("tokens should not be empty");
+
+        // If the last token is an `EndOfLine` token, don't increase the line counter since if a
+        // [`ParserError`] occurs there, lines will be miscounted
+        if token == Token::EndOfLine && !self.tokens.is_empty() {
+            self.line += 1;
+        }
+
+        token
     }
 
-    fn parse_stmt(&mut self) -> Stmt {
+    fn expect(&mut self, token: Token, error: ParserError) -> Result<(), ParserError> {
+        if self.tokens.is_empty() {
+            return Err(error);
+        }
+
+        if self.consume() != token {
+            return Err(error);
+        }
+
+        Ok(())
+    }
+
+    fn parse_stmt(&mut self) -> Result<Stmt, ParserError> {
         let Some(token) = self.peek() else {
             unreachable!();
         };
 
         let stmt = match token {
-            Token::Func => Stmt::Func(self.parse_func()),
-            Token::Let => Stmt::Var(self.parse_var()),
-            _ => Stmt::Expr(self.parse_expr()),
+            Token::Func => Stmt::Func(self.parse_func()?),
+            Token::Let => Stmt::Var(self.parse_var()?),
+            _ => Stmt::Expr(self.parse_expr()?),
         };
 
-        stmt
+        Ok(stmt)
     }
 
-    fn parse_func(&mut self) -> Func {
-        // TODO: Panics -> Results
-
+    fn parse_func(&mut self) -> Result<Func, ParserError> {
         // Consume the `fn` keyword
         self.consume();
 
         let Token::Ident(ident) = self.consume() else {
-            panic!("Expected identifier name following `fn` keyword");
+            return Err(ParserError::FnIdentifier);
         };
 
-        if self.consume() != Token::LeftParen {
-            panic!("Expected open parenthesis");
-        }
+        self.expect(Token::LeftParen, ParserError::FnArgsBegin)?;
 
         let params: Result<Vec<Ident>, ()> = self
-            .parse_args()
+            .parse_args()?
             .into_iter()
             .map(|expr| match expr {
                 Expr::Ident(ident) => Ok(ident),
@@ -95,12 +141,10 @@ impl Parser {
             .collect();
 
         let Ok(params) = params else {
-            panic!("Expected identifiers in function arguments");
+            return Err(ParserError::FnArgs);
         };
 
-        if Token::LeftBrace != self.consume() {
-            panic!("Expected block following function declaration");
-        }
+        self.expect(Token::LeftBrace, ParserError::FnBlockBegin)?;
 
         let mut body = vec![];
         while let Some(token) = self.tokens.front() {
@@ -109,92 +153,87 @@ impl Parser {
                 Token::EndOfLine => {
                     self.consume();
                 }
-                _ => body.push(self.parse_stmt()),
+                _ => body.push(self.parse_stmt()?),
             };
         }
 
-        if Token::RightBrace != self.consume() {
-            panic!("Expected closure at end of block");
-        }
+        self.expect(Token::RightBrace, ParserError::FnBlockEnd)?;
 
-        Func {
+        let func = Func {
             ident,
             params,
             body,
-        }
+        };
+
+        Ok(func)
     }
 
-    fn parse_args(&mut self) -> Vec<Expr> {
+    fn parse_args(&mut self) -> Result<Vec<Expr>, ParserError> {
         let mut args = Vec::new();
 
         if self.peek() == Some(&Token::RightParen) {
             self.consume();
-            return args;
+            return Ok(args);
         }
 
         // First argument won't be preceded by a separator
-        args.push(self.parse_assignment_expr());
+        args.push(self.parse_assignment_expr()?);
 
         // Get all separated arguments
         while self.peek() == Some(&Token::Separator) {
             self.consume();
-            args.push(self.parse_assignment_expr())
+            // TODO: Better error handling for no more tokens
+            args.push(self.parse_assignment_expr()?)
         }
 
-        if self.consume() != Token::RightParen {
-            panic!("Expected close parenthesis");
-        }
+        self.expect(Token::RightParen, ParserError::FnArgsEnd)?;
 
-        args
+        Ok(args)
     }
 
-    fn parse_var(&mut self) -> Var {
+    fn parse_var(&mut self) -> Result<Var, ParserError> {
         // Consume the `let` keyword
         self.consume();
 
         let Token::Ident(ident) = self.consume() else {
-            panic!("Expected identifier name following `let` keyword");
+            return Err(ParserError::VarIdentifier);
         };
 
-        if self.consume() != Token::Assignment {
-            panic!("Expected assignment operator `=` following identifier in variable declaration");
-        };
+        self.expect(Token::Assignment, ParserError::VarAssign)?;
 
         let var = Var {
             ident,
-            value: Box::new(self.parse_expr().into()),
+            value: Box::new(self.parse_expr()?.into()),
         };
 
-        if self.consume() != Token::EndOfLine {
-            panic!(r"Expected newline `\n` at end of variable declaration")
-        };
+        self.expect(Token::EndOfLine, ParserError::VarEndOfLine)?;
 
-        var
+        Ok(var)
     }
 
-    fn parse_expr(&mut self) -> Expr {
-        self.parse_assignment_expr()
+    fn parse_expr(&mut self) -> Result<Expr, ParserError> {
+        Ok(self.parse_assignment_expr()?)
     }
 
-    fn parse_assignment_expr(&mut self) -> Expr {
-        let left = self.parse_additive_expr();
+    fn parse_assignment_expr(&mut self) -> Result<Expr, ParserError> {
+        let mut left = self.parse_additive_expr()?;
 
         if self.peek() == Some(&Token::Assignment) {
             self.consume();
 
-            let value = self.parse_assignment_expr();
+            let value = self.parse_assignment_expr()?;
 
-            return Expr::Assignment {
+            left = Expr::Assignment {
                 assignee: Box::new(left),
                 value: Box::new(value),
             };
         }
 
-        left
+        Ok(left)
     }
 
-    fn parse_additive_expr(&mut self) -> Expr {
-        let mut left = self.parse_multiplicative_expr();
+    fn parse_additive_expr(&mut self) -> Result<Expr, ParserError> {
+        let mut left = self.parse_multiplicative_expr()?;
 
         loop {
             let Some(token) = self.peek() else {
@@ -212,7 +251,7 @@ impl Parser {
             };
 
             self.consume();
-            let right = self.parse_multiplicative_expr();
+            let right = self.parse_multiplicative_expr()?;
             left = Expr::BinaryOp {
                 left: Box::new(left),
                 right: Box::new(right),
@@ -220,11 +259,11 @@ impl Parser {
             }
         }
 
-        left
+        Ok(left)
     }
 
-    fn parse_multiplicative_expr(&mut self) -> Expr {
-        let mut left = self.parse_call_expr();
+    fn parse_multiplicative_expr(&mut self) -> Result<Expr, ParserError> {
+        let mut left = self.parse_call_expr()?;
 
         loop {
             let Some(token) = self.peek() else {
@@ -242,7 +281,7 @@ impl Parser {
             };
 
             self.consume();
-            let right = self.parse_multiplicative_expr();
+            let right = self.parse_multiplicative_expr()?;
             left = Expr::BinaryOp {
                 left: Box::new(left),
                 right: Box::new(right),
@@ -250,28 +289,28 @@ impl Parser {
             }
         }
 
-        left
+        Ok(left)
     }
 
-    fn parse_call_expr(&mut self) -> Expr {
-        let left = self.parse_primary_expr();
+    fn parse_call_expr(&mut self) -> Result<Expr, ParserError> {
+        let mut left = self.parse_primary_expr()?;
 
         if self.peek() == Some(&Token::LeftParen) {
             self.consume();
 
-            return Expr::Call {
+            left = Expr::Call {
                 caller: Box::new(left),
-                args: self.parse_args(),
+                args: self.parse_args()?,
             };
         }
 
-        left
+        Ok(left)
     }
 
-    fn parse_primary_expr(&mut self) -> Expr {
+    fn parse_primary_expr(&mut self) -> Result<Expr, ParserError> {
         let token = self.consume();
 
-        match token {
+        let expr = match token {
             Token::Ident(value) => Expr::Ident(value),
             Token::Int(value) => Expr::Int(
                 value
@@ -279,12 +318,14 @@ impl Parser {
                     .expect("`Int` token should be parsed as an `i32`"),
             ),
             Token::LeftParen => {
-                let expr = self.parse_expr();
+                let expr = self.parse_expr()?;
                 // Consume closing parenthesis
                 self.consume();
                 expr
             }
-            _ => Expr::Ident("NIL".into()),
-        }
+            _ => return Err(ParserError::Unsupported(token)),
+        };
+
+        Ok(expr)
     }
 }

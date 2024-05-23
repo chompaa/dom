@@ -4,9 +4,8 @@ use crate::{
     ast::{Expr, Func, Ident, Stmt, Var},
     environment::{Env, Val},
     lexer::BinaryOp,
+    util::Result,
 };
-
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 #[derive(Error, Debug)]
 pub enum InterpreterError {

@@ -26,9 +26,11 @@ fn main() {
     let mut env = Env::new();
 
     let mut result = |contents: String| {
-        let program = Parser::new()
-            .produce_ast(contents)
-            .expect("Should have been able to parse program");
+        let mut parser = Parser::new();
+        let program = match parser.produce_ast(contents) {
+            Ok(program) => program,
+            Err(reason) => panic!("[L{}] {}", parser.line(), reason),
+        };
         let result = eval(program, &mut env);
         match result {
             Ok(result) => match result {
