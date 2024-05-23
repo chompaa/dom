@@ -11,7 +11,7 @@
 use std::collections::VecDeque;
 use std::i32;
 
-use crate::ast::{Expr, Func, Ident, Stmt, StmtKind, Var};
+use crate::ast::{Expr, Func, Ident, Stmt, Var};
 use crate::lexer::{BinaryOp, Lexer, Token};
 
 pub(crate) struct Parser {
@@ -45,7 +45,7 @@ impl Parser {
         }
 
         // Return the program
-        let program = Stmt::new(StmtKind::Program { body });
+        let program = Stmt::Program { body };
         Ok(program)
     }
 
@@ -63,12 +63,12 @@ impl Parser {
         };
 
         let stmt = match token {
-            Token::Func => StmtKind::Func(self.parse_func()),
-            Token::Let => StmtKind::Var(self.parse_var()),
-            _ => StmtKind::Expr(self.parse_expr()),
+            Token::Func => Stmt::Func(self.parse_func()),
+            Token::Let => Stmt::Var(self.parse_var()),
+            _ => Stmt::Expr(self.parse_expr()),
         };
 
-        Stmt::new(stmt)
+        stmt
     }
 
     fn parse_func(&mut self) -> Func {

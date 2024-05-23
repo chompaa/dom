@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::{
-    ast::{Expr, Func, Ident, Stmt, StmtKind, Var},
+    ast::{Expr, Func, Ident, Stmt, Var},
     environment::{Env, Val},
     lexer::BinaryOp,
 };
@@ -20,12 +20,12 @@ pub enum InterpreterError {
     Caller,
 }
 
-pub fn eval(statement: Stmt, env: &mut Env) -> Result<Val> {
-    match statement.kind {
-        StmtKind::Program { body } => eval_program(body, env),
-        StmtKind::Func(func) => eval_func(func, env),
-        StmtKind::Var(var) => eval_var(var, env),
-        StmtKind::Expr(expr) => match expr {
+pub fn eval(statement: impl Into<Stmt>, env: &mut Env) -> Result<Val> {
+    match statement.into() {
+        Stmt::Program { body } => eval_program(body, env),
+        Stmt::Func(func) => eval_func(func, env),
+        Stmt::Var(var) => eval_var(var, env),
+        Stmt::Expr(expr) => match expr {
             Expr::Assignment { assignee, value } => eval_assign(*assignee, *value, env),
             Expr::Call { caller, args } => eval_call(*caller, args, env),
             Expr::Int(number) => Ok(Val::Int(number)),
@@ -54,8 +54,8 @@ fn eval_numeric_binary_expr(lhs: i32, rhs: i32, op: BinaryOp) -> Result<Val> {
 }
 
 fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &mut Env) -> Result<Val> {
-    let lhs = eval(left.into(), env)?;
-    let rhs = eval(right.into(), env)?;
+    let lhs = eval(left, env)?;
+    let rhs = eval(right, env)?;
 
     let (lhs, rhs) = match (lhs, rhs) {
         (Val::Int(lhs), Val::Int(rhs)) => (lhs, rhs),
@@ -97,23 +97,19 @@ fn eval_assign(assignee: Expr, value: Expr, env: &mut Env) -> Result<Val> {
         return Err(Box::new(InterpreterError::Assignment));
     };
 
-    let value = eval(value.into(), env)?;
+    let value = eval(value, env)?;
     let result = env.assign(assignee, value)?;
     Ok(result)
 }
 
 fn eval_call(caller: Expr, args: Vec<Expr>, env: &mut Env) -> Result<Val> {
-    let Ok(args): Result<Vec<Val>> = args
-        .into_iter()
-        .map(|arg| eval(Stmt::new(StmtKind::Expr(arg)), env))
-        .collect()
-    else {
+    let Ok(args): Result<Vec<Val>> = args.into_iter().map(|arg| eval(arg, env)).collect() else {
         return Err(Box::new(InterpreterError::Args));
     };
 
     let Val::Func {
         params, body, env, ..
-    } = eval(Stmt::new(StmtKind::Expr(caller)), env)?
+    } = eval(caller, env)?
     else {
         return Err(Box::new(InterpreterError::Caller));
     };

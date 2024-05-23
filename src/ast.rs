@@ -1,34 +1,34 @@
 use crate::lexer::BinaryOp;
 
 /// A statement in the abstract syntax tree.
-#[derive(Debug, Clone)]
-pub(crate) struct Stmt {
-    /// The kind of statement.
-    pub(crate) kind: StmtKind,
-}
-
-impl Stmt {
-    /// Creates a new statement with the given kind.
-    pub(crate) fn new(kind: StmtKind) -> Self {
-        Self { kind }
-    }
-}
-
-impl From<Expr> for Stmt {
-    /// Converts an expression into a statement.
-    fn from(expr: Expr) -> Self {
-        Stmt {
-            kind: StmtKind::Expr(expr.into()),
-        }
-    }
-}
+// #[derive(Debug, Clone)]
+// pub(crate) struct Stmt {
+//     /// The kind of statement.
+//     pub(crate) kind: StmtKind,
+// }
+//
+// impl Stmt {
+//     /// Creates a new statement with the given kind.
+//     pub(crate) fn new(kind: StmtKind) -> Self {
+//         Self { kind }
+//     }
+// }
+//
+// impl From<Expr> for Stmt {
+//     /// Converts an expression into a statement.
+//     fn from(expr: Expr) -> Self {
+//         Stmt {
+//             kind: StmtKind::Expr(expr.into()),
+//         }
+//     }
+// }
 
 /// An identifier (e.g. a variable name).
 pub type Ident = String;
 
 /// The kind of a statement.
 #[derive(Debug, Clone)]
-pub(crate) enum StmtKind {
+pub(crate) enum Stmt {
     /// A program consisting of a sequence of statements.
     Program {
         body: Vec<Stmt>,
@@ -39,6 +39,13 @@ pub(crate) enum StmtKind {
     Var(Var),
     /// An expression statement.
     Expr(Expr),
+}
+
+impl From<Expr> for Stmt {
+    /// Converts an expression into a statement.
+    fn from(expr: Expr) -> Self {
+        Stmt::Expr(expr)
+    }
 }
 
 /// A function declaration.
