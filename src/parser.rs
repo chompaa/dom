@@ -212,7 +212,7 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, ParserError> {
-        Ok(self.parse_assignment_expr()?)
+        self.parse_assignment_expr()
     }
 
     fn parse_assignment_expr(&mut self) -> Result<Expr, ParserError> {

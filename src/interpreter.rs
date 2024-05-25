@@ -106,21 +106,25 @@ fn eval_call(caller: Expr, args: Vec<Expr>, env: &mut Env) -> Result<Val> {
         return Err(Box::new(InterpreterError::Args));
     };
 
-    let Val::Func {
-        params, body, env, ..
-    } = eval(caller, env)?
-    else {
-        return Err(Box::new(InterpreterError::Caller));
-    };
+    match eval(caller, env)? {
+        Val::NativeFunc(native_func) => match native_func(args, env) {
+            Some(result) => Ok(result),
+            None => Ok(Val::None),
+        },
+        Val::Func {
+            params, body, env, ..
+        } => {
+            let mut env = env;
 
-    let mut env = env;
+            for (param, arg) in params.into_iter().zip(args.into_iter()) {
+                env.declare(param, arg)?;
+            }
 
-    for (param, arg) in params.into_iter().zip(args.into_iter()) {
-        env.declare(param, arg)?;
+            body.into_iter()
+                .map(|stmt| eval(stmt, &mut env))
+                .last()
+                .expect("Last value from program body should be obtainable")
+        }
+        _ => Err(Box::new(InterpreterError::Caller)),
     }
-
-    body.into_iter()
-        .map(|stmt| eval(stmt, &mut env))
-        .last()
-        .expect("Last value from program body should be obtainable")
 }

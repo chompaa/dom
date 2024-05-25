@@ -14,8 +14,39 @@ pub enum EnvError {
     Declaration(String),
 }
 
+pub trait CloneableFn: Fn(Vec<Val>, &mut Env) -> Option<Val> {
+    fn clone_box<'a>(&self) -> Box<dyn 'a + CloneableFn>
+    where
+        Self: 'a;
+}
+
+impl<F> CloneableFn for F
+where
+    F: Fn(Vec<Val>, &mut Env) -> Option<Val> + Clone,
+{
+    fn clone_box<'a>(&self) -> Box<dyn 'a + CloneableFn>
+    where
+        Self: 'a,
+    {
+        Box::new(self.clone())
+    }
+}
+
+impl<'a> Clone for Box<dyn 'a + CloneableFn> {
+    fn clone(&self) -> Self {
+        (**self).clone_box()
+    }
+}
+
+impl<'a> std::fmt::Debug for Box<dyn 'a + CloneableFn> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "NativeFunc")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Val {
+    None,
     Int(i32),
     Func {
         ident: Ident,
@@ -23,10 +54,22 @@ pub enum Val {
         body: Vec<Stmt>,
         env: Env,
     },
+    NativeFunc(Box<dyn CloneableFn>),
+}
+
+impl std::fmt::Display for Val {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Val::None => write!(f, ""),
+            Val::Int(int) => writeln!(f, "{int}"),
+            Val::Func { ident, params, .. } => writeln!(f, "{ident}({})", params.join(", ")),
+            Val::NativeFunc(func) => writeln!(f, "{func:?}"),
+        }
+    }
 }
 
 /// An environment for storing and looking up variables.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Env {
     /// The parent environment, if any.
     parent: Option<Box<Env>>,
@@ -35,14 +78,6 @@ pub struct Env {
 }
 
 impl Env {
-    /// Creates a new, empty environment.
-    pub fn new() -> Self {
-        Self {
-            parent: None,
-            values: HashMap::new(),
-        }
-    }
-
     /// Creates a new environment with the given parent environment.
     pub fn with_parent(parent: Env) -> Self {
         Self {
