@@ -6,6 +6,10 @@ use crate::util::is_alpha;
 pub enum LexerError {
     #[error("token `{0}` is invalid")]
     InvalidToken(char),
+    #[error("str was never terminated")]
+    UnterminatedString,
+    #[error("invalid escape sequence `{0}`")]
+    InvalidEscapeSequence(char),
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -21,19 +25,24 @@ pub enum Token {
     // Literals
     Ident(String),
     Int(String),
+    Str(String),
 
     // Keywords
     Let,
     Func,
 
-    // Grouping Operators
+    // Operators
     BinaryOp(BinaryOp),
     Assignment,
     Separator,
+
+    // Grouping
     LeftParen,
     RightParen,
     LeftBrace,
     RightBrace,
+
+    // Misc
     EndOfLine,
     EndOfFile,
 }
@@ -129,6 +138,32 @@ impl Lexer {
         self.buffer[start..self.cursor].iter().collect::<String>()
     }
 
+    fn read_str(&mut self) -> Result<String, LexerError> {
+        let start = self.position;
+        // Consume opening quote.
+        self.read_char();
+
+        while self.ch != '"' {
+            match self.ch {
+                '\0' => return Err(LexerError::UnterminatedString),
+                '\\' => {
+                    // Consume escape char
+                    self.read_char();
+                    match self.ch {
+                        '"' | '\\' | 'n' | 't' | 'r' => self.read_char(),
+                        _ => return Err(LexerError::InvalidEscapeSequence(self.ch)),
+                    }
+                }
+                _ => self.read_char(),
+            }
+        }
+
+        // Omit the start and end quotes.
+        Ok(self.buffer[start + 1..self.cursor - 1]
+            .iter()
+            .collect::<String>())
+    }
+
     /// Consumes all whitespace characters until a non-whitespace character is read.
     fn consume_whitespace(&mut self) {
         while self.ch == ' ' {
@@ -153,6 +188,7 @@ impl Lexer {
             '{' => Token::LeftBrace,
             '}' => Token::RightBrace,
             '\n' => Token::EndOfLine,
+            '"' => Token::Str(self.read_str()?),
             _ => {
                 if is_alpha(self.ch) {
                     let ident = self.read_ident();

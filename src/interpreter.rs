@@ -27,9 +27,10 @@ pub fn eval(statement: impl Into<Stmt>, env: &mut Env) -> Result<Val> {
         Stmt::Expr(expr) => match expr {
             Expr::Assignment { assignee, value } => eval_assign(*assignee, *value, env),
             Expr::Call { caller, args } => eval_call(*caller, args, env),
-            Expr::Int(number) => Ok(Val::Int(number)),
             Expr::BinaryOp { left, right, op } => eval_binary_expr(*left, *right, op, env),
+            Expr::Str(value) => Ok(Val::Str(value)),
             Expr::Ident(ident) => eval_ident(ident, env),
+            Expr::Int(number) => Ok(Val::Int(number)),
         },
     }
 }

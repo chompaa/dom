@@ -311,6 +311,7 @@ impl Parser {
         let token = self.consume();
 
         let expr = match token {
+            Token::Str(value) => Expr::Str(value),
             Token::Ident(value) => Expr::Ident(value),
             Token::Int(value) => Expr::Int(
                 value

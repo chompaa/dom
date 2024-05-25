@@ -59,6 +59,8 @@ pub enum Expr {
         caller: Box<Expr>,
         args: Vec<Expr>,
     },
+    /// A string expression.
+    Str(String),
     /// An identifier expression.
     Ident(Ident),
     /// An integer literal expression.
