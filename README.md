@@ -5,12 +5,13 @@
 ## Features 
 
 - [ ] Types
+    - [ ] Booleans
     - [x] Integers
     - [ ] Floats
-    - [ ] Strings
+    - [x] Strings
 - [x] Mutable variables
 - [x] Binary operations/expressions
-- [ ] Conditional statements/closures
+- [ ] Conditional statements
 - [x] Functions
 - [ ] Loops
 
@@ -26,8 +27,6 @@ Arithmetic can be performed as you would expect. For example:
 
 Outputs `2`. Operations follow the usual order of operations.
 
-### Variables
-
 Variables can be set using the `let` keyword as follows:
 
 ```rs
@@ -35,6 +34,8 @@ let foo = 1
 ```
 
 They are always mutable.
+
+</details>
 
 ### Functions
 
@@ -53,6 +54,14 @@ sum(1, 1)
 ```
 
 Arguments are always passed by value, for now.
+
+Dom also contains some built-in functions, which can be seen below:
+
+| Function | Arguments | Example | Description |
+| --- | --- | --- | --- |
+| `print` | `Int \| Str` | `print("Hello, world")` | Outputs a literal to the console
+
+</details>
 
 ## Running 
 
@@ -73,6 +82,6 @@ cargo run
 - To interpret a file:
 
 ```sh
-cargo run -- <file>
+cargo run <file>
 ```
 
