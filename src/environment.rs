@@ -47,8 +47,9 @@ impl<'a> std::fmt::Debug for Box<dyn 'a + CloneableFn> {
 #[derive(Debug, Clone)]
 pub enum Val {
     None,
-    Str(String),
+    Bool(bool),
     Int(i32),
+    Str(String),
     Func {
         ident: Ident,
         params: Vec<Ident>,
@@ -62,8 +63,9 @@ impl std::fmt::Display for Val {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Val::None => write!(f, ""),
-            Val::Str(value) => writeln!(f, "{value}"),
+            Val::Bool(bool) => writeln!(f, "{bool}"),
             Val::Int(int) => writeln!(f, "{int}"),
+            Val::Str(value) => writeln!(f, "{value}"),
             Val::Func { ident, params, .. } => writeln!(f, "{ident}({})", params.join(", ")),
             Val::NativeFunc(func) => writeln!(f, "{func:?}"),
         }

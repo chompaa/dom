@@ -20,9 +20,20 @@ pub enum BinaryOp {
     Div,
 }
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum CmpOp {
+    Eq,
+    NotEq,
+    Less,
+    LessEq,
+    Greater,
+    GreaterEq,
+}
+
 #[derive(PartialEq, Debug)]
 pub enum Token {
     // Literals
+    Bool(String),
     Ident(String),
     Int(String),
     Str(String),
@@ -33,6 +44,7 @@ pub enum Token {
 
     // Operators
     BinaryOp(BinaryOp),
+    CmpOp(CmpOp),
     Assignment,
     Separator,
 
@@ -177,12 +189,39 @@ impl Lexer {
 
         let token = match self.ch {
             '\0' => Token::EndOfFile,
-            '=' => Token::Assignment,
-            ',' => Token::Separator,
             '+' => Token::BinaryOp(BinaryOp::Add),
             '-' => Token::BinaryOp(BinaryOp::Sub),
             '*' => Token::BinaryOp(BinaryOp::Mul),
             '/' => Token::BinaryOp(BinaryOp::Div),
+            '=' => match self.peek_char() {
+                '=' => {
+                    self.read_char();
+                    Token::CmpOp(CmpOp::Eq)
+                }
+                _ => Token::Assignment,
+            },
+            '!' => match self.peek_char() {
+                '=' => {
+                    self.read_char();
+                    Token::CmpOp(CmpOp::NotEq)
+                }
+                _ => return Err(LexerError::InvalidToken(self.ch)),
+            },
+            '<' => match self.peek_char() {
+                '=' => {
+                    self.read_char();
+                    Token::CmpOp(CmpOp::LessEq)
+                }
+                _ => Token::CmpOp(CmpOp::Less),
+            },
+            '>' => match self.peek_char() {
+                '=' => {
+                    self.read_char();
+                    Token::CmpOp(CmpOp::GreaterEq)
+                }
+                _ => Token::CmpOp(CmpOp::Greater),
+            },
+            ',' => Token::Separator,
             '(' => Token::LeftParen,
             ')' => Token::RightParen,
             '{' => Token::LeftBrace,
@@ -196,6 +235,7 @@ impl Lexer {
                     match ident.as_str() {
                         "fn" => Token::Func,
                         "let" => Token::Let,
+                        "true" | "false" => Token::Bool(ident),
                         _ => Token::Ident(ident),
                     }
                 } else if self.ch.is_ascii_digit() {

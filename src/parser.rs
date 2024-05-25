@@ -3,6 +3,7 @@
 //! Order of precedence:
 //! - Assignment
 //! - Block
+//! - Comparison
 //! - Addition
 //! - Multiplication
 //! - Call
@@ -216,7 +217,7 @@ impl Parser {
     }
 
     fn parse_assignment_expr(&mut self) -> Result<Expr, ParserError> {
-        let mut left = self.parse_additive_expr()?;
+        let mut left = self.parse_comparison_expr()?;
 
         if self.peek() == Some(&Token::Assignment) {
             self.consume();
@@ -228,6 +229,24 @@ impl Parser {
                 value: Box::new(value),
             };
         }
+
+        Ok(left)
+    }
+
+    fn parse_comparison_expr(&mut self) -> Result<Expr, ParserError> {
+        let mut left = self.parse_additive_expr()?;
+
+        let Some(&Token::CmpOp(op)) = self.peek() else {
+            return Ok(left);
+        };
+
+        self.consume();
+        let right = self.parse_additive_expr()?;
+        left = Expr::CmpOp {
+            left: Box::new(left),
+            right: Box::new(right),
+            op,
+        };
 
         Ok(left)
     }
@@ -311,13 +330,21 @@ impl Parser {
         let token = self.consume();
 
         let expr = match token {
-            Token::Str(value) => Expr::Str(value),
             Token::Ident(value) => Expr::Ident(value),
+            Token::Bool(value) => {
+                let value = match value.as_ref() {
+                    "true" => true,
+                    "false" => false,
+                    _ => unreachable!("`Bool` token should have value `true` or `false`"),
+                };
+                Expr::Bool(value)
+            }
             Token::Int(value) => Expr::Int(
                 value
                     .parse::<i32>()
                     .expect("`Int` token should be parsed as an `i32`"),
             ),
+            Token::Str(value) => Expr::Str(value),
             Token::LeftParen => {
                 let expr = self.parse_expr()?;
                 // Consume closing parenthesis

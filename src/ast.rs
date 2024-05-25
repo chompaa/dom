@@ -1,4 +1,4 @@
-use crate::lexer::BinaryOp;
+use crate::lexer::{BinaryOp, CmpOp};
 
 /// An identifier (e.g. a variable name).
 pub type Ident = String;
@@ -63,8 +63,19 @@ pub enum Expr {
     Str(String),
     /// An identifier expression.
     Ident(Ident),
+    /// An boolean literal expression.
+    Bool(bool),
     /// An integer literal expression.
     Int(i32),
+    /// A comparison operation expression.
+    CmpOp {
+        /// The left operand of the comparison operation.
+        left: Box<Expr>,
+        /// The right operand of the comparison operation.
+        right: Box<Expr>,
+        /// The comparison operation itself.
+        op: CmpOp,
+    },
     /// A binary operation expression.
     BinaryOp {
         /// The left operand of the binary operation.
