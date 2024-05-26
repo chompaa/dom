@@ -5,7 +5,7 @@
 ## Features 
 
 - [ ] Types
-    - [ ] Booleans
+    - [x] Booleans
     - [x] Integers
     - [ ] Floats
     - [x] Strings
@@ -17,6 +17,26 @@
 
 ## Syntax
 
+### Comparison
+
+Comparison uses the usual operators:
+
+```js
+let foo = 1
+let bar = 2
+
+print(foo <= bar) // true
+print(foo >= bar) // false
+print(foo != bar) // true
+print(foo == bar) // false
+```
+
+Currently supported operations are:
+- Equal `==`
+- Not equal `!=`
+- Less than (or eq) `<(=)`
+- Greater than (or eq)`>(=)`
+
 ### Arithmetic
 
 Arithmetic can be performed as you would expect. For example:
@@ -26,6 +46,14 @@ Arithmetic can be performed as you would expect. For example:
 ```
 
 Outputs `2`. Operations follow the usual order of operations.
+
+Currently supported operations are:
+- Addition `+`
+- Subtraction `-`
+- Multiplication `*`
+- Division `/`
+
+### Variables
 
 Variables can be set using the `let` keyword as follows:
 
