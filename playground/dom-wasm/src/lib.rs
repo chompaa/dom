@@ -21,9 +21,12 @@ pub fn interpret(contents: &str) {
     );
 
     let mut parser = Parser::new();
-    let program = match parser.produce_ast(contents.to_string()) {
-        Ok(program) => program,
-        Err(reason) => panic!("[L{}] {reason}", parser.line()),
+    match parser.produce_ast(contents.to_string()) {
+        Ok(program) => {
+            let _ = eval(program, &mut env);
+        }
+        Err(reason) => {
+            console::log_1(&format!("[L{}] {reason}", parser.line()).into());
+        }
     };
-    let _ = eval(program, &mut env);
 }
