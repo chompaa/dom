@@ -22,7 +22,7 @@ const App = () => {
   };
 
   return (
-    <main className="h-screen flex flex-row bg-white">
+    <main className="h-screen flex flex-row bg-white overflow-hidden">
       <section className="w-full relative border-r-2 border-gray-100">
         <div className=" h-12 bg-gray-50 flex flex-row text-gray-500 items-center gap-2">
           <button
