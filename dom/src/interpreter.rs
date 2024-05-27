@@ -129,7 +129,7 @@ fn eval_call(caller: Expr, args: Vec<Expr>, env: &mut Env) -> Result<Val> {
     };
 
     match eval(caller, env)? {
-        Val::NativeFunc(native_func) => match native_func(args, env) {
+        Val::NativeFunc(mut native_func) => match native_func(args, env) {
             Some(result) => Ok(result),
             None => Ok(Val::None),
         },

@@ -41,6 +41,7 @@ pub enum Token {
     // Keywords
     Let,
     Func,
+    Return,
 
     // Operators
     BinaryOp(BinaryOp),
@@ -233,8 +234,9 @@ impl Lexer {
                     let ident = self.read_ident();
 
                     match ident.as_str() {
-                        "fn" => Token::Func,
                         "let" => Token::Let,
+                        "fn" => Token::Func,
+                        "ret" => Token::Return,
                         "true" | "false" => Token::Bool(ident),
                         _ => Token::Ident(ident),
                     }

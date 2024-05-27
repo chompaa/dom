@@ -14,7 +14,7 @@ pub enum EnvError {
     Declaration(String),
 }
 
-pub trait CloneableFn: Fn(Vec<Val>, &mut Env) -> Option<Val> {
+pub trait CloneableFn: FnMut(Vec<Val>, &mut Env) -> Option<Val> {
     fn clone_box<'a>(&self) -> Box<dyn 'a + CloneableFn>
     where
         Self: 'a;
@@ -63,11 +63,11 @@ impl std::fmt::Display for Val {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Val::None => write!(f, ""),
-            Val::Bool(bool) => writeln!(f, "{bool}"),
-            Val::Int(int) => writeln!(f, "{int}"),
-            Val::Str(value) => writeln!(f, "{value}"),
-            Val::Func { ident, params, .. } => writeln!(f, "{ident}({})", params.join(", ")),
-            Val::NativeFunc(func) => writeln!(f, "{func:?}"),
+            Val::Bool(bool) => write!(f, "{bool}"),
+            Val::Int(int) => write!(f, "{int}"),
+            Val::Str(value) => write!(f, "{value}"),
+            Val::Func { ident, params, .. } => write!(f, "{ident}({})", params.join(", ")),
+            Val::NativeFunc(func) => write!(f, "{func:?}"),
         }
     }
 }

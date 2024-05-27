@@ -5,7 +5,9 @@ mod lexer;
 mod parser;
 mod util;
 
-use crate::{environment::Env, interpreter::eval, parser::Parser};
+use environment::{Env, Val};
+use interpreter::eval;
+use parser::Parser;
 
 use std::{
     fmt::Write as _,
@@ -14,7 +16,6 @@ use std::{
 };
 
 use clap::Parser as _;
-use environment::Val;
 
 #[derive(clap::Parser)]
 struct Args {
@@ -31,7 +32,7 @@ fn main() {
         "print".to_owned(),
         Val::NativeFunc(Box::new(|args, _| {
             let joined = args.iter().fold(String::new(), |mut output, arg| {
-                let _ = write!(output, "{arg} ");
+                let _ = write!(output, "{arg}");
                 output
             });
 
