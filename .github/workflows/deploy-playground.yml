@@ -1,0 +1,45 @@
+name: Deploy Playground
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install `wasm_pack`
+        run: cargo install wasm-pack
+      - name: Call playground directory
+        run: cd playground
+      - name: Pack `dom-wasm`
+        run: wasm-pack build dom-wasm 
+      - name: Install dependencies
+        run: bun install && bun install ./dom-wasm/pkg
+      - name: Build
+        run: bun run build
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./dist"
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
