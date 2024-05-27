@@ -2,6 +2,12 @@
 
 > An experimental scripting language with minimalism in mind
 
+## Playground
+
+![playground](https://github.com/chompaa/dom/assets/26204416/3cef6cb1-3ff4-4fc9-999d-7c828b28197d)
+
+You can try Dom for yourself using the playground [here](https://chompaa.github.io/dom/).
+
 ## Features 
 
 - [ ] Types
