@@ -1,6 +1,6 @@
 # Dom
 
-> An experimental scripting language with minimalism in mind
+> A scripting language written in Rust
 
 ## Playground
 
