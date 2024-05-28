@@ -22,8 +22,8 @@ const App = () => {
   };
 
   return (
-    <main className="h-screen flex flex-row bg-white overflow-hidden">
-      <section className="w-full relative border-r-2 border-gray-100">
+    <main className="h-screen flex flex-row bg-white">
+      <section className="w-full relative border-r-2 border-gray-100 flex flex-col">
         <div className=" h-12 bg-gray-50 flex flex-row text-gray-500 items-center gap-2">
           <button
             className="bg-gray-100 border-gray-500 hover:bg-gray-500 hover:text-gray-100 border-2 px-2 m-1"
@@ -32,7 +32,9 @@ const App = () => {
             run
           </button>
         </div>
-        <Editor editorRef={editorRef} />
+        <div className="flex flex-1">
+          <Editor editorRef={editorRef} />
+        </div>
       </section>
       <section className="w-full relative bg-white border-l-2 border-gray-100">
         <div className="flex items-center bg-gray-50 text-gray-500 pl-1 h-12">
