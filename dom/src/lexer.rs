@@ -236,7 +236,7 @@ impl Lexer {
                     match ident.as_str() {
                         "let" => Token::Let,
                         "fn" => Token::Func,
-                        "ret" => Token::Return,
+                        "return" => Token::Return,
                         "true" | "false" => Token::Bool(ident),
                         _ => Token::Ident(ident),
                     }

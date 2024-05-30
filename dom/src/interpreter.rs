@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::{
-    ast::{Expr, Func, Ident, Stmt, Var},
+    ast::{Expr, Func, Ident, Return, Stmt, Var},
     environment::{Env, Val},
     lexer::{BinaryOp, CmpOp},
     util::Result,
@@ -23,8 +23,9 @@ pub enum InterpreterError {
 
 pub fn eval(statement: impl Into<Stmt>, env: &mut Env) -> Result<Val> {
     match statement.into() {
-        Stmt::Program { body } => eval_program(body, env),
+        Stmt::Program { body } => eval_body(body, env),
         Stmt::Func(func) => eval_func(func, env),
+        Stmt::Return(ret) => eval_return(ret, env),
         Stmt::Var(var) => eval_var(var, env),
         Stmt::Expr(expr) => match expr {
             Expr::Assignment { assignee, value } => eval_assign(*assignee, *value, env),
@@ -39,11 +40,86 @@ pub fn eval(statement: impl Into<Stmt>, env: &mut Env) -> Result<Val> {
     }
 }
 
-fn eval_program(body: Vec<Stmt>, env: &mut Env) -> Result<Val> {
-    body.into_iter()
-        .map(|stmt| eval(stmt, env))
-        .last()
-        .expect("Last value from program body should be obtainable")
+fn eval_body(body: Vec<Stmt>, env: &mut Env) -> Result<Val> {
+    let mut last = None;
+
+    for stmt in body {
+        if let Stmt::Return(_) = stmt {
+            return eval(stmt, env);
+        }
+        last = Some(eval(stmt, env)?);
+    }
+
+    match last {
+        Some(val) => Ok(val),
+        None => Ok(Val::None),
+    }
+}
+
+fn eval_func(func: Func, env: &mut Env) -> Result<Val> {
+    let ident = &func.ident;
+
+    let func = Val::Func {
+        ident: ident.to_owned(),
+        params: func.params,
+        body: func.body,
+        // TODO: Remove this clone
+        env: Env::with_parent(env.clone()),
+    };
+
+    let result = env.declare(ident.to_owned(), func);
+
+    Ok(result?)
+}
+
+fn eval_return(ret: Return, env: &mut Env) -> Result<Val> {
+    let Return { value } = ret;
+
+    let result = match value {
+        Some(value) => eval(value, env)?,
+        None => Val::None,
+    };
+
+    Ok(result)
+}
+
+fn eval_var(var: Var, env: &mut Env) -> Result<Val> {
+    let value = eval(*var.value, env)?;
+    let result = env.declare(var.ident, value)?;
+    Ok(result)
+}
+
+fn eval_assign(assignee: Expr, value: Expr, env: &mut Env) -> Result<Val> {
+    let Expr::Ident(assignee) = assignee else {
+        return Err(Box::new(InterpreterError::Assignment));
+    };
+
+    let value = eval(value, env)?;
+    let result = env.assign(assignee, value)?;
+    Ok(result)
+}
+
+fn eval_call(caller: Expr, args: Vec<Expr>, env: &mut Env) -> Result<Val> {
+    let Ok(args): Result<Vec<Val>> = args.into_iter().map(|arg| eval(arg, env)).collect() else {
+        return Err(Box::new(InterpreterError::Args));
+    };
+
+    match eval(caller, env)? {
+        Val::NativeFunc(mut native_func) => match native_func(args, env) {
+            Some(result) => Ok(result),
+            None => Ok(Val::None),
+        },
+        Val::Func {
+            params, body, env, ..
+        } => {
+            let mut env = env;
+            for (param, arg) in params.into_iter().zip(args.into_iter()) {
+                env.declare(param, arg)?;
+            }
+            eval_body(body, &mut env)
+        }
+        _ => Err(Box::new(InterpreterError::Caller)),
+    }
 }
 
 fn eval_cmp_expr(left: Expr, right: Expr, op: CmpOp, env: &mut Env) -> Result<Val> {
@@ -89,64 +165,4 @@ fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &mut Env) -> Res
 fn eval_ident(ident: Ident, env: &mut Env) -> Result<Val> {
     let val = env.lookup(ident)?;
     Ok(val)
-}
-
-fn eval_func(func: Func, env: &mut Env) -> Result<Val> {
-    let ident = &func.ident;
-
-    let func = Val::Func {
-        ident: ident.to_owned(),
-        params: func.params,
-        body: func.body,
-        // TODO: Remove this clone
-        env: Env::with_parent(env.clone()),
-    };
-
-    let result = env.declare(ident.to_owned(), func);
-
-    Ok(result?)
-}
-
-fn eval_var(var: Var, env: &mut Env) -> Result<Val> {
-    let value = eval(*var.value, env)?;
-    let result = env.declare(var.ident, value)?;
-    Ok(result)
-}
-
-fn eval_assign(assignee: Expr, value: Expr, env: &mut Env) -> Result<Val> {
-    let Expr::Ident(assignee) = assignee else {
-        return Err(Box::new(InterpreterError::Assignment));
-    };
-
-    let value = eval(value, env)?;
-    let result = env.assign(assignee, value)?;
-    Ok(result)
-}
-
-fn eval_call(caller: Expr, args: Vec<Expr>, env: &mut Env) -> Result<Val> {
-    let Ok(args): Result<Vec<Val>> = args.into_iter().map(|arg| eval(arg, env)).collect() else {
-        return Err(Box::new(InterpreterError::Args));
-    };
-
-    match eval(caller, env)? {
-        Val::NativeFunc(mut native_func) => match native_func(args, env) {
-            Some(result) => Ok(result),
-            None => Ok(Val::None),
-        },
-        Val::Func {
-            params, body, env, ..
-        } => {
-            let mut env = env;
-
-            for (param, arg) in params.into_iter().zip(args.into_iter()) {
-                env.declare(param, arg)?;
-            }
-
-            body.into_iter()
-                .map(|stmt| eval(stmt, &mut env))
-                .last()
-                .expect("Last value from program body should be obtainable")
-        }
-        _ => Err(Box::new(InterpreterError::Caller)),
-    }
 }

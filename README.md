@@ -81,7 +81,7 @@ fn sum(a, b) {
 }
 ```
 
-They always return the last evaluated expression (there is no way to return early, yet). They are called as you may expect:
+Unless the `return` keyword is used, they return the last evaluated expression. They are called as you may expect:
 
 ```rs
 sum(1, 1)
@@ -97,14 +97,14 @@ Dom also contains some built-in functions, which can be seen below:
 
 </details>
 
-## Running 
+## Interpreting 
 
 Make sure you have the Rust toolchain installed.
 
 - Clone this repository and navigate to it:
 
 ```sh
-git clone https://github.com/chompaa/dom && cd dom
+git clone https://github.com/chompaa/dom && cd dom/dom
 ```
 
 - To start the interactive shell:

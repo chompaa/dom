@@ -32,7 +32,7 @@ fn main() {
         "print".to_owned(),
         Val::NativeFunc(Box::new(|args, _| {
             let joined = args.iter().fold(String::new(), |mut output, arg| {
-                let _ = write!(output, "{arg}");
+                let _ = write!(output, "{arg} ");
                 output
             });
 

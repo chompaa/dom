@@ -14,7 +14,7 @@ use std::i32;
 
 use thiserror::Error;
 
-use crate::ast::{Expr, Func, Ident, Stmt, Var};
+use crate::ast::{Expr, Func, Ident, Return, Stmt, Var};
 use crate::lexer::{BinaryOp, Lexer, Token};
 
 #[derive(Error, Debug)]
@@ -39,6 +39,12 @@ pub enum ParserError {
     VarEndOfLine,
     #[error("token {0:?} is unsupported")]
     Unsupported(Token),
+}
+
+enum Process {
+    Break,
+    Consume,
+    Push,
 }
 
 pub struct Parser {
@@ -66,18 +72,36 @@ impl Parser {
         self.tokens = tokens.into();
 
         // Build out the program body
-        let mut body = vec![];
-        while let Some(token) = self.tokens.front() {
-            if *token == Token::EndOfLine {
-                self.consume();
-                continue;
-            }
-            body.push(self.parse_stmt()?);
-        }
+        let body = self.process(|token| match token {
+            Token::EndOfLine => Process::Consume,
+            _ => Process::Push,
+        })?;
 
         // Return the program
         let program = Stmt::Program { body };
+        dbg!(&program);
         Ok(program)
+    }
+
+    fn process<F>(&mut self, mut _process: F) -> Result<Vec<Stmt>, ParserError>
+    where
+        F: FnMut(&Token) -> Process,
+    {
+        let mut body = vec![];
+
+        while let Some(token) = &self.tokens.front() {
+            match _process(token) {
+                Process::Break => break,
+                Process::Consume => {
+                    self.consume();
+                }
+                Process::Push => {
+                    body.push(self.parse_stmt()?);
+                }
+            }
+        }
+
+        Ok(body)
     }
 
     fn peek(&self) -> Option<&Token> {
@@ -108,18 +132,47 @@ impl Parser {
         Ok(())
     }
 
+    fn expect_not(&mut self, token: Token, error: ParserError) -> Result<(), ParserError> {
+        if self.tokens.is_empty() {
+            return Err(error);
+        }
+
+        if self.consume() == token {
+            return Err(error);
+        }
+
+        Ok(())
+    }
+
     fn parse_stmt(&mut self) -> Result<Stmt, ParserError> {
         let Some(token) = self.peek() else {
             unreachable!();
         };
 
         let stmt = match token {
-            Token::Func => Stmt::Func(self.parse_func()?),
             Token::Let => Stmt::Var(self.parse_var()?),
+            Token::Func => Stmt::Func(self.parse_func()?),
+            Token::Return => Stmt::Return(self.parse_return()?),
             _ => Stmt::Expr(self.parse_expr()?),
         };
 
         Ok(stmt)
+    }
+
+    fn parse_return(&mut self) -> Result<Return, ParserError> {
+        // Consume the `return` keyword
+        self.consume();
+
+        if self.peek() == Some(&Token::EndOfLine) {
+            let result = Return { value: None };
+            return Ok(result);
+        }
+
+        let result = Return {
+            value: Some(self.parse_expr()?),
+        };
+
+        Ok(result)
     }
 
     fn parse_func(&mut self) -> Result<Func, ParserError> {
@@ -147,16 +200,11 @@ impl Parser {
 
         self.expect(Token::LeftBrace, ParserError::FnBlockBegin)?;
 
-        let mut body = vec![];
-        while let Some(token) = self.tokens.front() {
-            match *token {
-                Token::RightBrace => break,
-                Token::EndOfLine => {
-                    self.consume();
-                }
-                _ => body.push(self.parse_stmt()?),
-            };
-        }
+        let body = self.process(|token| match token {
+            Token::RightBrace => Process::Break,
+            Token::EndOfLine => Process::Consume,
+            _ => Process::Push,
+        })?;
 
         self.expect(Token::RightBrace, ParserError::FnBlockEnd)?;
 
