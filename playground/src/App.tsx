@@ -1,13 +1,16 @@
 import { interpret } from "dom-wasm";
 import { editor } from "monaco-editor";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import "./App.css";
 import Editor from "./components/Editor";
+import TabItem from "./components/TabItem";
+import TabList from "./components/TabList";
 import useOutput from "./hooks/useOutput";
 
 const App = () => {
   const editorRef = useRef<null | editor.IStandaloneCodeEditor>(null);
   const [output, writeOutput, clearOutput] = useOutput();
+  const [ast, setAst] = useState("");
 
   console.log = (text) => {
     writeOutput(text);
@@ -18,7 +21,8 @@ const App = () => {
     if (!editorRef.current) {
       return;
     }
-    interpret(editorRef.current.getValue());
+    const ast = interpret(editorRef.current.getValue());
+    setAst(() => ast);
   };
 
   return (
@@ -36,15 +40,15 @@ const App = () => {
           <Editor editorRef={editorRef} />
         </div>
       </section>
-      <section className="w-full relative bg-white border-l-2 border-gray-100">
-        <div className="flex items-center bg-gray-50 text-gray-500 pl-1 h-12">
-          <span>output</span>
-        </div>
-        <div className="p-1">
-          {output.split("\n").map((str, index) => (
-            <p key={index}>{str}</p>
-          ))}
-        </div>
+      <section className="flex flex-col w-full max-h-full relative bg-white border-l-2 border-gray-100 overflow-x-scroll">
+        <TabList activeTabIndex={0}>
+          <TabItem label="output">
+            <pre className="font-primary text-2xl">{output}</pre>
+          </TabItem>
+          <TabItem label="ast">
+            <pre className="font-primary text-2xl">{ast}</pre>
+          </TabItem>
+        </TabList>
       </section>
     </main>
   );
