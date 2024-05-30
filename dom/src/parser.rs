@@ -79,7 +79,6 @@ impl Parser {
 
         // Return the program
         let program = Stmt::Program { body };
-        dbg!(&program);
         Ok(program)
     }
 

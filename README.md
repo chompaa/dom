@@ -10,6 +10,7 @@ You can try Dom for yourself using the playground [here](https://chompaa.github.
 
 ## Features 
 
+- [x] Comments
 - [ ] Types
     - [x] Booleans
     - [x] Integers
@@ -17,11 +18,24 @@ You can try Dom for yourself using the playground [here](https://chompaa.github.
     - [x] Strings
 - [x] Mutable variables
 - [x] Binary operations/expressions
-- [x] Conditional statements
+- [ ] Conditional statements
+    - [x] Single conditions
+    - [ ] Multiple conditions
 - [x] Functions
+    - [x] Returns
 - [ ] Loops
 
 ## Syntax
+
+### Comments
+
+Commenting is done with the `//` characters:
+
+```rs
+// Hello, world!
+```
+
+They are not parsed in any manner.
 
 ### Comparison
 
@@ -43,7 +57,6 @@ Currently supported operations are:
 - Less than (or eq) `<(=)`
 - Greater than (or eq)`>(=)`
 
-            eval_body(body, &mut env)
 ### Arithmetic
 
 Arithmetic can be performed as you would expect. For example:

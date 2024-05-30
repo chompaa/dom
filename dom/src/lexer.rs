@@ -122,6 +122,15 @@ impl Lexer {
         self.cursor += 1;
     }
 
+    fn read_comment(&mut self) {
+        loop {
+            if self.ch == '\n' {
+                break;
+            }
+            self.read_char();
+        }
+    }
+
     /// Reads an identifier, leaving the cursor at the last character of the identifier.
     fn read_ident(&mut self) -> String {
         let start = self.position;
@@ -194,7 +203,13 @@ impl Lexer {
             '+' => Token::BinaryOp(BinaryOp::Add),
             '-' => Token::BinaryOp(BinaryOp::Sub),
             '*' => Token::BinaryOp(BinaryOp::Mul),
-            '/' => Token::BinaryOp(BinaryOp::Div),
+            '/' => match self.peek_char() {
+                '/' => {
+                    self.read_comment();
+                    return self.next();
+                }
+                _ => Token::BinaryOp(BinaryOp::Div),
+            },
             '=' => match self.peek_char() {
                 '=' => {
                     self.read_char();

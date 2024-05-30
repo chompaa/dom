@@ -11,7 +11,8 @@ const Editor = ({
 }: {
   editorRef: React.MutableRefObject<null | editor.IStandaloneCodeEditor>;
 }) => {
-  const defaultValue = `fn add(a, b) {
+  const defaultValue = `// Adds two numbers together
+fn add(a, b) {
     a + b
 }
 let sum = add(2, 2)
@@ -41,10 +42,10 @@ print("Sum:", sum)`;
           ],
           [/\b\d+\b/, "number"],
           [/".*?"/, "string"],
+          [/\/\/.*/, "comment"],
         ],
       },
     });
-
     monaco.editor.defineTheme("gruvbox-light", {
       base: "vs",
       inherit: true,
@@ -54,6 +55,7 @@ print("Sum:", sum)`;
         { token: "number", foreground: "8f3f71" },
         { token: "boolean", foreground: "8f3f71" },
         { token: "string", foreground: "79740e" },
+        { token: "comment", foreground: "928374" },
       ],
       colors: {
         "editor.foreground": "#3c3836",
