@@ -17,7 +17,7 @@ You can try Dom for yourself using the playground [here](https://chompaa.github.
     - [x] Strings
 - [x] Mutable variables
 - [x] Binary operations/expressions
-- [ ] Conditional statements
+- [x] Conditional statements
 - [x] Functions
 - [ ] Loops
 
@@ -43,6 +43,7 @@ Currently supported operations are:
 - Less than (or eq) `<(=)`
 - Greater than (or eq)`>(=)`
 
+            eval_body(body, &mut env)
 ### Arithmetic
 
 Arithmetic can be performed as you would expect. For example:
@@ -70,6 +71,19 @@ let foo = 1
 They are always mutable.
 
 </details>
+
+### Conditionals
+
+Conditional statements can be formed using the `if` keyword:
+
+```rs
+let foo = 1
+let bar = 2
+
+if foo < bar {
+    print("`foo` is less than `bar`")
+}
+```
 
 ### Functions
 

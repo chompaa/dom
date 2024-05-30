@@ -14,7 +14,7 @@ use std::i32;
 
 use thiserror::Error;
 
-use crate::ast::{Expr, Func, Ident, Return, Stmt, Var};
+use crate::ast::{Cond, Expr, Func, Ident, Return, Stmt, Var};
 use crate::lexer::{BinaryOp, Lexer, Token};
 
 #[derive(Error, Debug)]
@@ -151,6 +151,7 @@ impl Parser {
 
         let stmt = match token {
             Token::Let => Stmt::Var(self.parse_var()?),
+            Token::Cond => Stmt::Cond(self.parse_cond()?),
             Token::Func => Stmt::Func(self.parse_func()?),
             Token::Return => Stmt::Return(self.parse_return()?),
             _ => Stmt::Expr(self.parse_expr()?),
@@ -238,6 +239,27 @@ impl Parser {
         self.expect(Token::RightParen, ParserError::FnArgsEnd)?;
 
         Ok(args)
+    }
+
+    fn parse_cond(&mut self) -> Result<Cond, ParserError> {
+        // Consume the `if` keyword
+        self.consume();
+
+        let condition = self.parse_expr()?;
+
+        self.expect(Token::LeftBrace, ParserError::FnBlockBegin)?;
+
+        let body = self.process(|token| match token {
+            Token::RightBrace => Process::Break,
+            Token::EndOfLine => Process::Consume,
+            _ => Process::Push,
+        })?;
+
+        self.expect(Token::RightBrace, ParserError::FnBlockEnd)?;
+
+        let cond = Cond { condition, body };
+
+        Ok(cond)
     }
 
     fn parse_var(&mut self) -> Result<Var, ParserError> {

@@ -8,6 +8,8 @@ pub type Ident = String;
 pub enum Stmt {
     /// A program consisting of a sequence of statements.
     Program { body: Vec<Stmt> },
+    /// A conditional statement.
+    Cond(Cond),
     /// A callable function.
     Func(Func),
     /// A return statement.
@@ -23,6 +25,15 @@ impl From<Expr> for Stmt {
     fn from(expr: Expr) -> Self {
         Stmt::Expr(expr)
     }
+}
+
+/// A conditional declaration.
+#[derive(Debug, Clone)]
+pub struct Cond {
+    /// The condition to be checked.
+    pub condition: Expr,
+    /// The body of the conditional to be executed if the condition succeeds.
+    pub body: Vec<Stmt>,
 }
 
 /// A function declaration.

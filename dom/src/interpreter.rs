@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::{
-    ast::{Expr, Func, Ident, Return, Stmt, Var},
+    ast::{Cond, Expr, Func, Ident, Return, Stmt, Var},
     environment::{Env, Val},
     lexer::{BinaryOp, CmpOp},
     util::Result,
@@ -24,6 +24,7 @@ pub enum InterpreterError {
 pub fn eval(statement: impl Into<Stmt>, env: &mut Env) -> Result<Val> {
     match statement.into() {
         Stmt::Program { body } => eval_body(body, env),
+        Stmt::Cond(cond) => eval_cond(cond, env),
         Stmt::Func(func) => eval_func(func, env),
         Stmt::Return(ret) => eval_return(ret, env),
         Stmt::Var(var) => eval_var(var, env),
@@ -54,6 +55,21 @@ fn eval_body(body: Vec<Stmt>, env: &mut Env) -> Result<Val> {
         Some(val) => Ok(val),
         None => Ok(Val::None),
     }
+}
+
+fn eval_cond(cond: Cond, env: &mut Env) -> Result<Val> {
+    let Cond { condition, body } = cond;
+
+    let Val::Bool(success) = eval(condition, env)? else {
+        return Err(Box::new(InterpreterError::Cmp));
+    };
+
+    if success {
+        let result = eval_body(body, env)?;
+        return Ok(result);
+    }
+
+    Ok(Val::None)
 }
 
 fn eval_func(func: Func, env: &mut Env) -> Result<Val> {

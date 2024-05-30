@@ -40,6 +40,7 @@ pub enum Token {
 
     // Keywords
     Let,
+    Cond,
     Func,
     Return,
 
@@ -235,6 +236,7 @@ impl Lexer {
 
                     match ident.as_str() {
                         "let" => Token::Let,
+                        "if" => Token::Cond,
                         "fn" => Token::Func,
                         "return" => Token::Return,
                         "true" | "false" => Token::Bool(ident),

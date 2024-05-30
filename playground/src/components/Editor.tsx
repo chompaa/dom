@@ -23,7 +23,7 @@ print("Sum:", sum)`;
 
   const handleEditorWillMount: BeforeMount = (monaco) => {
     monaco.languages.register({ id: "dom" });
-    const keywords = ["let", "fn", "return"];
+    const keywords = ["if", "let", "fn", "return"];
 
     monaco.languages.setMonarchTokensProvider("dom", {
       keywords,
