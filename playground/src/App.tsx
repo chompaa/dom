@@ -22,7 +22,7 @@ const App = () => {
       return;
     }
     const ast = interpret(editorRef.current.getValue());
-    setAst(() => ast);
+    setAst(ast);
   };
 
   return (

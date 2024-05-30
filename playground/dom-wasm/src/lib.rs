@@ -5,7 +5,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::console;
 
 #[wasm_bindgen]
-pub fn interpret(contents: &str) {
+pub fn interpret(contents: &str) -> String {
     let mut env = Env::default();
 
     let _ = env.declare(
@@ -23,10 +23,13 @@ pub fn interpret(contents: &str) {
     let mut parser = Parser::new();
     match parser.produce_ast(contents.to_string()) {
         Ok(program) => {
+            let ast = format!("{:#?}", program);
             let _ = eval(program, &mut env);
+            return ast;
         }
         Err(reason) => {
             console::log_1(&format!("[L{}] {reason}", parser.line()).into());
+            return "AST could not be produced".to_string();
         }
     };
 }

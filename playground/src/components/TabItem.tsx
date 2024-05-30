@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 
 const TabItem = ({
   children,
+  // @ts-ignore
   label,
 }: {
   children: ReactNode;
