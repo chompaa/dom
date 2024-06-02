@@ -128,20 +128,17 @@ Dom also contains some built-in functions, which can be seen below:
 
 Loops are defined using the `loop` keyword, and use `break` and `continue` for control flow:
 
-```
-rs
+```rs
 let foo = 0
 let bar = 2
 
 loop {
+    foo = foo + 1
     if foo == bar {
         // Exit this iteration 
         continue
     }
-
     print(foo)
-    foo = foo + 1
-
     if foo > 10 {
         // Exit the loop
         break
