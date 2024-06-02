@@ -23,7 +23,7 @@ You can try Dom for yourself using the playground [here](https://chompaa.github.
     - [ ] Multiple conditions
 - [x] Functions
     - [x] Returns
-- [ ] Loops
+- [x] Loops
 
 ## Syntax
 
@@ -54,8 +54,10 @@ print(foo == bar) // false
 Currently supported operations are:
 - Equal `==`
 - Not equal `!=`
-- Less than (or eq) `<(=)`
-- Greater than (or eq)`>(=)`
+- Less than `<`
+- Less than or equal `<=`
+- Greater than `>`
+- Greater than or equal `>=`
 
 ### Arithmetic
 
@@ -121,6 +123,31 @@ Dom also contains some built-in functions, which can be seen below:
 | Function | Arguments | Example | Description |
 | --- | --- | --- | --- |
 | `print` | `Int \| Str` | `print("Hello, world")` | Outputs a literal to the console
+
+### Loops
+
+Loops are defined using the `loop` keyword, and use `break` and `continue` for control flow:
+
+```
+rs
+let foo = 0
+let bar = 2
+
+loop {
+    if foo == bar {
+        // Exit this iteration 
+        continue
+    }
+
+    print(foo)
+    foo = foo + 1
+
+    if foo > 10 {
+        // Exit the loop
+        break
+    }
+}
+```
 
 </details>
 

@@ -14,6 +14,8 @@ pub enum Stmt {
     Func(Func),
     /// A return statement.
     Return(Return),
+    /// A loop statement.
+    Loop(Loop),
     /// A variable declaration.
     Var(Var),
     /// An expression statement.
@@ -54,6 +56,13 @@ pub struct Return {
     pub value: Option<Expr>,
 }
 
+/// A loop statement.
+#[derive(Debug, Clone)]
+pub struct Loop {
+    /// The value returned.
+    pub body: Vec<Stmt>,
+}
+
 /// A variable declaration.
 #[derive(Debug, Clone)]
 pub struct Var {
@@ -64,7 +73,7 @@ pub struct Var {
 }
 
 /// An expression in the abstract syntax tree.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     /// An assignment expression.
     Assignment {
@@ -103,4 +112,8 @@ pub enum Expr {
         /// The binary operation itself.
         op: BinaryOp,
     },
+    /// A continue expression for loops.
+    Continue,
+    /// A break expression for loops.
+    Break,
 }

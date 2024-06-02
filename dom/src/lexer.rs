@@ -43,6 +43,9 @@ pub enum Token {
     Cond,
     Func,
     Return,
+    Loop,
+    Continue,
+    Break,
 
     // Operators
     BinaryOp(BinaryOp),
@@ -250,10 +253,15 @@ impl Lexer {
                     let ident = self.read_ident();
 
                     match ident.as_str() {
+                        // Keywords
                         "let" => Token::Let,
                         "if" => Token::Cond,
                         "fn" => Token::Func,
                         "return" => Token::Return,
+                        "loop" => Token::Loop,
+                        "continue" => Token::Continue,
+                        "break" => Token::Break,
+                        // Misc
                         "true" | "false" => Token::Bool(ident),
                         _ => Token::Ident(ident),
                     }

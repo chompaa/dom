@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::{
-    ast::{Cond, Expr, Func, Ident, Return, Stmt, Var},
+    ast::{Cond, Expr, Func, Ident, Loop, Return, Stmt, Var},
     environment::{Env, Val},
     lexer::{BinaryOp, CmpOp},
     util::Result,
@@ -19,6 +19,16 @@ pub enum InterpreterError {
     Args,
     #[error("caller is not a defined function")]
     Caller,
+    #[error("expression {0:?} cannot be evaluated")]
+    Eval(Expr),
+}
+
+#[derive(Error, Debug)]
+pub enum Exception {
+    #[error("cannot break out of non-loop")]
+    Break,
+    #[error("cannot continue out of non-loop")]
+    Continue,
 }
 
 pub fn eval(statement: impl Into<Stmt>, env: &mut Env) -> Result<Val> {
@@ -26,7 +36,8 @@ pub fn eval(statement: impl Into<Stmt>, env: &mut Env) -> Result<Val> {
         Stmt::Program { body } => eval_body(body, env),
         Stmt::Cond(cond) => eval_cond(cond, env),
         Stmt::Func(func) => eval_func(func, env),
-        Stmt::Return(ret) => eval_return(ret, env),
+        Stmt::Return(_return) => eval_return(_return, env),
+        Stmt::Loop(_loop) => eval_loop(_loop, env),
         Stmt::Var(var) => eval_var(var, env),
         Stmt::Expr(expr) => match expr {
             Expr::Assignment { assignee, value } => eval_assign(*assignee, *value, env),
@@ -37,6 +48,9 @@ pub fn eval(statement: impl Into<Stmt>, env: &mut Env) -> Result<Val> {
             Expr::Bool(value) => Ok(Val::Bool(value)),
             Expr::Int(number) => Ok(Val::Int(number)),
             Expr::Str(value) => Ok(Val::Str(value)),
+            Expr::Continue => Err(Box::new(Exception::Continue)),
+            Expr::Break => Err(Box::new(Exception::Break)),
+            _ => Err(Box::new(InterpreterError::Eval(expr))),
         },
     }
 }
@@ -88,8 +102,8 @@ fn eval_func(func: Func, env: &mut Env) -> Result<Val> {
     Ok(result?)
 }
 
-fn eval_return(ret: Return, env: &mut Env) -> Result<Val> {
-    let Return { value } = ret;
+fn eval_return(_return: Return, env: &mut Env) -> Result<Val> {
+    let Return { value } = _return;
 
     let result = match value {
         Some(value) => eval(value, env)?,
@@ -97,6 +111,38 @@ fn eval_return(ret: Return, env: &mut Env) -> Result<Val> {
     };
 
     Ok(result)
+}
+
+fn eval_loop(_loop: Loop, env: &mut Env) -> Result<Val> {
+    let Loop { body } = _loop;
+
+    let mut last = None;
+
+    'outer: loop {
+        for stmt in &body {
+            if let Stmt::Return(_) = stmt {
+                return eval(stmt.clone(), env);
+            }
+            let result = eval(stmt.clone(), env);
+            match result {
+                Ok(result) => last = Some(result),
+                Err(kind) => {
+                    if let Some(exception) = kind.downcast_ref::<Exception>() {
+                        match exception {
+                            Exception::Continue => continue 'outer,
+                            Exception::Break => break 'outer,
+                        }
+                    }
+                    return Err(kind);
+                }
+            }
+        }
+    }
+
+    match last {
+        Some(val) => Ok(val),
+        None => Ok(Val::None),
+    }
 }
 
 fn eval_var(var: Var, env: &mut Env) -> Result<Val> {

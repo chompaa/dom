@@ -14,7 +14,7 @@ use std::i32;
 
 use thiserror::Error;
 
-use crate::ast::{Cond, Expr, Func, Ident, Return, Stmt, Var};
+use crate::ast::{Cond, Expr, Func, Ident, Loop, Return, Stmt, Var};
 use crate::lexer::{BinaryOp, Lexer, Token};
 
 #[derive(Error, Debug)]
@@ -153,10 +153,28 @@ impl Parser {
             Token::Cond => Stmt::Cond(self.parse_cond()?),
             Token::Func => Stmt::Func(self.parse_func()?),
             Token::Return => Stmt::Return(self.parse_return()?),
+            Token::Loop => Stmt::Loop(self.parse_loop()?),
             _ => Stmt::Expr(self.parse_expr()?),
         };
 
         Ok(stmt)
+    }
+
+    fn parse_loop(&mut self) -> Result<Loop, ParserError> {
+        // Consume the `loop` keyword
+        self.consume();
+
+        self.expect(Token::LeftBrace, ParserError::FnBlockBegin)?;
+
+        let body = self.process(|token| match token {
+            Token::RightBrace => Process::Break,
+            Token::EndOfLine => Process::Consume,
+            _ => Process::Push,
+        })?;
+
+        self.expect(Token::RightBrace, ParserError::FnBlockEnd)?;
+
+        Ok(Loop { body })
     }
 
     fn parse_return(&mut self) -> Result<Return, ParserError> {
@@ -420,6 +438,8 @@ impl Parser {
                 self.consume();
                 expr
             }
+            Token::Continue => Expr::Continue,
+            Token::Break => Expr::Break,
             _ => return Err(ParserError::Unsupported(token)),
         };
 
