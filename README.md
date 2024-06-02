@@ -4,7 +4,7 @@
 
 ## Playground
 
-![playground](https://github.com/chompaa/dom/assets/26204416/3cef6cb1-3ff4-4fc9-999d-7c828b28197d)
+![playground](https://github.com/chompaa/dom/assets/26204416/2473fbf1-c6c6-4c28-b5ff-ff83f6288c84)
 
 You can try Dom for yourself using the playground [here](https://chompaa.github.io/dom/).
 
