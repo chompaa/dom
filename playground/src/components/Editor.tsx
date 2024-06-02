@@ -11,12 +11,26 @@ const Editor = ({
 }: {
   editorRef: React.MutableRefObject<null | editor.IStandaloneCodeEditor>;
 }) => {
-  const defaultValue = `// Adds two numbers together
-fn add(a, b) {
-    a + b
+  const defaultValue = `// Prints a sequence from \`0\` to \`end\`
+fn print_sequence(end) {
+    if end < 0 {
+        // Negative numbers are bad!
+        return
+    }
+
+    let curr = 0
+    loop {
+        print(curr)
+        if curr >= end {
+            // Exit the loop
+            break
+        }
+        // Increment \`curr\`
+        curr = curr + 1
+    }
 }
-let sum = add(2, 2)
-print("Sum:", sum)`;
+
+print_sequence(10)`;
 
   const handleEditorDidMount: OnMount = (editor, _) => {
     editorRef.current = editor;
@@ -46,6 +60,34 @@ print("Sum:", sum)`;
         ],
       },
     });
+
+    monaco.languages.setLanguageConfiguration("dom", {
+      autoClosingPairs: [
+        { open: "{", close: "}" },
+        { open: "[", close: "]" },
+        { open: "(", close: ")" },
+        { open: '"', close: '"' },
+        { open: "'", close: "'" },
+      ],
+      brackets: [
+        ["{", "}"],
+        ["[", "]"],
+        ["(", ")"],
+      ],
+      surroundingPairs: [
+        { open: "{", close: "}" },
+        { open: "[", close: "]" },
+        { open: "(", close: ")" },
+        { open: '"', close: '"' },
+        { open: "'", close: "'" },
+      ],
+      indentationRules: {
+        increaseIndentPattern: new RegExp("^.*\\{[^}\"']*$"),
+        decreaseIndentPattern: new RegExp("^\\s*\\}"),
+      },
+      colorizedBracketPairs: [],
+    });
+
     monaco.editor.defineTheme("gruvbox-light", {
       base: "vs",
       inherit: true,
@@ -87,6 +129,12 @@ print("Sum:", sum)`;
         guides: {
           indentation: false,
         },
+        autoClosingBrackets: "always",
+        autoIndent: "full",
+        bracketPairColorization: {
+          enabled: false,
+        },
+        matchBrackets: "never",
       }}
     />
   );
