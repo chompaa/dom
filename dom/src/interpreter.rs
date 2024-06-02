@@ -164,6 +164,7 @@ fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &mut Env) -> Res
     let rhs = eval(right, env)?;
 
     let result: Val = match (lhs, rhs) {
+        // Integer operations
         (Val::Int(lhs), Val::Int(rhs)) => {
             let value = match op {
                 BinaryOp::Add => lhs + rhs,
@@ -173,10 +174,33 @@ fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &mut Env) -> Res
             };
             Val::Int(value)
         }
-        (Val::Str(lhs), Val::Str(rhs)) => match op {
-            BinaryOp::Add => Val::Str(format!("{lhs}{rhs}")),
-            _ => return Err(Box::new(InterpreterError::Binary)),
-        },
+        // String addition.
+        //
+        // Example: "foo" + "bar" -> "foobar"
+        (Val::Str(lhs), Val::Str(rhs)) => {
+            if op == BinaryOp::Add {
+                Val::Str(format!("{lhs}{rhs}"))
+            } else {
+                return Err(Box::new(InterpreterError::Binary));
+            }
+        }
+        // String repeating. Integers less than one are not valid.
+        //
+        // Example: "foo" * 2 -> "foofoo".
+        (Val::Str(lhs), Val::Int(rhs)) => {
+            if op == BinaryOp::Mul && rhs > 1 {
+                Val::Str(lhs.repeat(rhs as usize))
+            } else {
+                return Err(Box::new(InterpreterError::Binary));
+            }
+        }
+        (Val::Int(lhs), Val::Str(rhs)) => {
+            if op == BinaryOp::Mul && lhs > 1 {
+                Val::Str(rhs.repeat(lhs as usize))
+            } else {
+                return Err(Box::new(InterpreterError::Binary));
+            }
+        }
         _ => return Err(Box::new(InterpreterError::Binary)),
     };
 
