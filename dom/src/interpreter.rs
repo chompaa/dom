@@ -11,7 +11,7 @@ use crate::{
 pub enum InterpreterError {
     #[error("missing identifier in assignment")]
     Assignment,
-    #[error("binary expressions can only contain integers or references to integers")]
+    #[error("binary expression unsupported")]
     Binary,
     #[error("comparison expressions can only contain integers or references to integers")]
     Cmp,
@@ -163,19 +163,24 @@ fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &mut Env) -> Res
     let lhs = eval(left, env)?;
     let rhs = eval(right, env)?;
 
-    let (lhs, rhs) = match (lhs, rhs) {
-        (Val::Int(lhs), Val::Int(rhs)) => (lhs, rhs),
+    let result: Val = match (lhs, rhs) {
+        (Val::Int(lhs), Val::Int(rhs)) => {
+            let value = match op {
+                BinaryOp::Add => lhs + rhs,
+                BinaryOp::Sub => lhs - rhs,
+                BinaryOp::Mul => lhs * rhs,
+                BinaryOp::Div => lhs / rhs,
+            };
+            Val::Int(value)
+        }
+        (Val::Str(lhs), Val::Str(rhs)) => match op {
+            BinaryOp::Add => Val::Str(format!("{lhs}{rhs}")),
+            _ => return Err(Box::new(InterpreterError::Binary)),
+        },
         _ => return Err(Box::new(InterpreterError::Binary)),
     };
 
-    let result = match op {
-        BinaryOp::Add => lhs + rhs,
-        BinaryOp::Sub => lhs - rhs,
-        BinaryOp::Mul => lhs * rhs,
-        BinaryOp::Div => lhs / rhs,
-    };
-
-    Ok(Val::Int(result))
+    Ok(result)
 }
 
 fn eval_ident(ident: Ident, env: &mut Env) -> Result<Val> {
