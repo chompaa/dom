@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use thiserror::Error;
 
 use crate::{
@@ -31,7 +33,7 @@ pub enum Exception {
     Return(Option<Box<Expr>>),
 }
 
-pub fn eval(statement: impl Into<Stmt>, env: &mut Env) -> Result<Val> {
+pub fn eval(statement: impl Into<Stmt>, env: &Rc<RefCell<Env>>) -> Result<Val> {
     match statement.into() {
         Stmt::Program { body } => eval_body(body, env),
         Stmt::Cond(cond) => eval_cond(cond, env),
@@ -59,14 +61,14 @@ pub fn eval(statement: impl Into<Stmt>, env: &mut Env) -> Result<Val> {
     }
 }
 
-fn eval_body(body: Vec<Stmt>, env: &mut Env) -> Result<Val> {
+fn eval_body(body: Vec<Stmt>, env: &Rc<RefCell<Env>>) -> Result<Val> {
     body.into_iter()
         .map(|stmt| eval(stmt, env))
         .last()
         .unwrap_or(Ok(Val::None))
 }
 
-fn eval_cond(cond: Cond, env: &mut Env) -> Result<Val> {
+fn eval_cond(cond: Cond, env: &Rc<RefCell<Env>>) -> Result<Val> {
     let Cond { condition, body } = cond;
 
     let Val::Bool(success) = eval(condition, env)? else {
@@ -74,37 +76,40 @@ fn eval_cond(cond: Cond, env: &mut Env) -> Result<Val> {
     };
 
     if success {
-        let result = eval_body(body, env)?;
-
+        let env = Env::with_parent(Rc::clone(env));
+        let result = eval_body(body, &env)?;
         return Ok(result);
     }
 
     Ok(Val::None)
 }
 
-fn eval_func(ident: &Ident, params: Vec<Ident>, body: Vec<Stmt>, env: &mut Env) -> Result<Val> {
+fn eval_func(
+    ident: &Ident,
+    params: Vec<Ident>,
+    body: Vec<Stmt>,
+    env: &Rc<RefCell<Env>>,
+) -> Result<Val> {
     let func = Val::Func {
         ident: ident.to_owned(),
         params,
         body,
-        env: Env::with_parent(env.clone()),
+        env: Env::with_parent(Rc::clone(env)),
     };
 
-    let result = env.declare(ident.to_owned(), func);
+    let result = env.borrow_mut().declare(ident.to_owned(), func);
 
     Ok(result?)
 }
 
-fn eval_loop(body: &Vec<Stmt>, env: &mut Env) -> Result<Val> {
+fn eval_loop(body: &Vec<Stmt>, env: &Rc<RefCell<Env>>) -> Result<Val> {
     let mut last = None;
 
-    // Used so that we can keep track of what variables existed before the loop
-    let stored_env = env.clone();
-    let idents = stored_env.values().keys().collect::<Vec<_>>();
-
     'outer: loop {
+        let loop_env = Env::with_parent(Rc::clone(env));
+
         for stmt in body {
-            let result = eval(stmt.clone(), env);
+            let result = eval(stmt.clone(), &loop_env);
 
             match result {
                 Ok(result) => last = Some(result),
@@ -115,9 +120,6 @@ fn eval_loop(body: &Vec<Stmt>, env: &mut Env) -> Result<Val> {
                 },
             }
         }
-
-        // Drop any values that were declared in an iteration
-        env.values_mut().retain(|ident, _| idents.contains(&ident));
     }
 
     match last {
@@ -126,52 +128,50 @@ fn eval_loop(body: &Vec<Stmt>, env: &mut Env) -> Result<Val> {
     }
 }
 
-fn eval_var(ident: Ident, value: Stmt, env: &mut Env) -> Result<Val> {
+fn eval_var(ident: Ident, value: Stmt, env: &Rc<RefCell<Env>>) -> Result<Val> {
     let value = eval(value, env)?;
-    let result = env.declare(ident, value)?;
+    let result = env.borrow_mut().declare(ident, value)?;
     Ok(result)
 }
 
-fn eval_assign(assignee: Expr, value: Expr, env: &mut Env) -> Result<Val> {
+fn eval_assign(assignee: Expr, value: Expr, env: &Rc<RefCell<Env>>) -> Result<Val> {
     let Expr::Ident(assignee) = assignee else {
         return Err(Box::new(InterpreterError::Assignment));
     };
 
     let value = eval(value, env)?;
-    let result = env.assign(assignee, value)?;
+    let result = Env::assign(env, assignee, value)?;
     Ok(result)
 }
 
-fn eval_call(caller: Expr, args: Vec<Expr>, env: &mut Env) -> Result<Val> {
+fn eval_call(caller: Expr, args: Vec<Expr>, env: &Rc<RefCell<Env>>) -> Result<Val> {
     let Ok(args): Result<Vec<Val>> = args.into_iter().map(|arg| eval(arg, env)).collect() else {
         return Err(Box::new(InterpreterError::Args));
     };
 
     match eval(caller, env)? {
-        Val::NativeFunc(mut native_func) => match native_func(args, env) {
+        Val::NativeFunc(mut native_func) => match native_func(args, Rc::clone(env)) {
             Some(result) => Ok(result),
             None => Ok(Val::None),
         },
         Val::Func {
             params, body, env, ..
         } => {
-            let mut env = env;
-
             for (param, arg) in params.into_iter().zip(args.into_iter()) {
-                env.declare(param, arg)?;
+                env.borrow_mut().declare(param, arg)?;
             }
 
             let mut last = None;
 
             for stmt in body {
-                let result = eval(stmt, &mut env);
+                let result = eval(stmt, &env);
 
                 match result {
                     Ok(result) => last = Some(result),
                     Err(kind) => match kind.downcast_ref() {
                         Some(Exception::Return(value)) => {
                             last = match value {
-                                Some(value) => Some(eval(*value.clone(), &mut env)?),
+                                Some(value) => Some(eval(*value.clone(), &env)?),
                                 None => None,
                             };
                             break;
@@ -190,7 +190,7 @@ fn eval_call(caller: Expr, args: Vec<Expr>, env: &mut Env) -> Result<Val> {
     }
 }
 
-fn eval_cmp_expr(left: Expr, right: Expr, op: CmpOp, env: &mut Env) -> Result<Val> {
+fn eval_cmp_expr(left: Expr, right: Expr, op: CmpOp, env: &Rc<RefCell<Env>>) -> Result<Val> {
     let lhs = eval(left, env)?;
     let rhs = eval(right, env)?;
 
@@ -211,7 +211,7 @@ fn eval_cmp_expr(left: Expr, right: Expr, op: CmpOp, env: &mut Env) -> Result<Va
     Ok(Val::Bool(result))
 }
 
-fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &mut Env) -> Result<Val> {
+fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &Rc<RefCell<Env>>) -> Result<Val> {
     let lhs = eval(left, env)?;
     let rhs = eval(right, env)?;
 
@@ -261,7 +261,7 @@ fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &mut Env) -> Res
     Ok(result)
 }
 
-fn eval_ident(ident: &Ident, env: &mut Env) -> Result<Val> {
-    let val = env.lookup(ident)?;
+fn eval_ident(ident: &Ident, env: &Rc<RefCell<Env>>) -> Result<Val> {
+    let val = Env::lookup(env, ident)?;
     Ok(val)
 }

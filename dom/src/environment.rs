@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::ast::{Ident, Stmt};
 
@@ -14,7 +14,7 @@ pub enum EnvError {
     Declaration(String),
 }
 
-pub trait CloneableFn: FnMut(Vec<Val>, &mut Env) -> Option<Val> {
+pub trait CloneableFn: FnMut(Vec<Val>, Rc<RefCell<Env>>) -> Option<Val> {
     fn clone_box<'a>(&self) -> Box<dyn 'a + CloneableFn>
     where
         Self: 'a;
@@ -22,7 +22,7 @@ pub trait CloneableFn: FnMut(Vec<Val>, &mut Env) -> Option<Val> {
 
 impl<F> CloneableFn for F
 where
-    F: Fn(Vec<Val>, &mut Env) -> Option<Val> + Clone,
+    F: Fn(Vec<Val>, Rc<RefCell<Env>>) -> Option<Val> + Clone,
 {
     fn clone_box<'a>(&self) -> Box<dyn 'a + CloneableFn>
     where
@@ -54,7 +54,7 @@ pub enum Val {
         ident: Ident,
         params: Vec<Ident>,
         body: Vec<Stmt>,
-        env: Env,
+        env: Rc<RefCell<Env>>,
     },
     NativeFunc(Box<dyn CloneableFn>),
 }
@@ -76,19 +76,24 @@ impl std::fmt::Display for Val {
 #[derive(Debug, Clone, Default)]
 pub struct Env {
     /// The parent environment, if any.
-    parent: Option<Box<Env>>,
+    parent: Option<Rc<RefCell<Env>>>,
     /// The values stored in this environment.
     values: HashMap<String, Val>,
 }
 
 impl Env {
+    #[must_use]
+    pub fn new() -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Self::default()))
+    }
+
     /// Creates a new environment with the given parent environment.
     #[must_use]
-    pub fn with_parent(parent: Env) -> Self {
-        Self {
-            parent: Some(Box::new(parent)),
+    pub fn with_parent(parent: Rc<RefCell<Env>>) -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Self {
+            parent: Some(parent),
             values: HashMap::new(),
-        }
+        }))
     }
 
     /// Returns a reference to the values stored in this environment.
@@ -98,6 +103,7 @@ impl Env {
     }
 
     /// Returns a mutable reference to the values stored in the environment.
+    #[must_use]
     pub fn values_mut(&mut self) -> &mut HashMap<String, Val> {
         &mut self.values
     }
@@ -119,11 +125,11 @@ impl Env {
     /// Assigns a new value to the variable with the given name.
     ///
     /// Returns an error if no variable with the given name exists in this environment or its parents.
-    pub fn assign(&mut self, name: String, value: Val) -> Result<Val, EnvError> {
+    pub fn assign(env: &Rc<RefCell<Self>>, name: String, value: Val) -> Result<Val, EnvError> {
         // Find the environment where the variable is declared.
-        let env = self.resolve_mut(&name)?;
+        let env = Self::resolve(env, &name)?;
 
-        env.values.insert(name, value.clone());
+        env.borrow_mut().values.insert(name, value.clone());
 
         Ok(value)
     }
@@ -131,12 +137,11 @@ impl Env {
     /// Looks up the value of the variable with the given name.
     ///
     /// Returns an error if no variable with the given name exists in this environment or its parents.
-    pub fn lookup(&self, name: &str) -> Result<Val, EnvError> {
+    pub fn lookup(env: &Rc<RefCell<Self>>, name: &str) -> Result<Val, EnvError> {
         // Find the environment where the variable is declared.
-        let env = self.resolve(name)?;
-
-        let value = env
-            .values
+        let env = Self::resolve(env, name)?;
+        let values = &env.borrow().values;
+        let value = values
             .get(name)
             .expect("Environment should contain identifier");
 
@@ -144,31 +149,127 @@ impl Env {
     }
 
     /// Resolves the environment that contains the variable with the given name.
-    fn resolve(&self, name: &str) -> Result<&Env, EnvError> {
-        if self.values.contains_key(name) {
-            return Ok(self);
+    fn resolve(env: &Rc<RefCell<Self>>, name: &str) -> Result<Rc<RefCell<Env>>, EnvError> {
+        if env.borrow().values.contains_key(name) {
+            return Ok(Rc::clone(env));
         }
 
-        if let Some(parent) = &self.parent {
-            return parent.resolve(name);
+        match &env.borrow().parent {
+            Some(parent) => Self::resolve(parent, name),
+            None => Err(EnvError::Declaration(name.to_string())),
         }
+    }
+}
 
-        Err(EnvError::Declaration(name.to_string()))
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    impl PartialEq for Val {
+        fn eq(&self, other: &Self) -> bool {
+            match (self, other) {
+                (Val::Int(a), Val::Int(b)) => a == b,
+                _ => false,
+            }
+        }
     }
 
-    /// Resolves the mutable environment that contains the variable with the given name.
-    fn resolve_mut(&mut self, name: &str) -> Result<&mut Env, EnvError> {
-        // If the variable is declared in this environment, return this environment.
-        if self.values.contains_key(name) {
-            return Ok(self);
-        }
+    #[test]
+    fn declare_and_lookup() {
+        let env = Env::new();
 
-        // If there is a parent environment, recursively search for the variable there.
-        if let Some(parent) = &mut self.parent {
-            return parent.resolve_mut(name);
-        }
+        let name = "foo";
+        let value = Val::Int(0);
 
-        // If no environment contains the variable, return an error.
-        Err(EnvError::Declaration(name.to_string()))
+        // Declare a variable in the environment
+        env.borrow_mut()
+            .declare(name.to_string(), value.clone())
+            .expect("should be able to declare variable");
+
+        // Lookup the variable
+        let result = Env::lookup(&env, &name).expect("variable should exist");
+        assert_eq!(result, value);
+    }
+
+    #[test]
+    fn declare_error() {
+        let env = Env::new();
+
+        let name = "foo";
+        let value = Val::Int(0);
+
+        // Declare a variable in the environment
+        env.borrow_mut()
+            .declare(name.to_string(), value.clone())
+            .expect("should be able to declare variable");
+
+        // Attempt to redeclare the same variable
+        let result = env.borrow_mut().declare(name.to_string(), value.clone());
+        assert!(matches!(result, Err(EnvError::Duplicate(_))));
+    }
+
+    #[test]
+    fn lookup_error() {
+        let env = Env::new();
+
+        // Attempt to lookup a non-existent variable
+        let name = "foo";
+        let result = Env::lookup(&env, &name);
+        assert!(matches!(result, Err(EnvError::Declaration(_))));
+    }
+
+    #[test]
+    fn assign_and_lookup() {
+        let env = Env::new();
+
+        let name = "foo";
+        let value = Val::Int(0);
+
+        // Declare a variable in the environment
+        env.borrow_mut()
+            .declare(name.to_string(), value.clone())
+            .expect("should be able to declare variable");
+
+        // Assign a new value to the variable
+        let value = Val::Int(1);
+        Env::assign(&env, name.to_string(), value.clone())
+            .expect("should be able to assign value to variable");
+
+        // Lookup the variable
+        let result = Env::lookup(&env, &name).expect("should be able to lookup variable");
+        assert_eq!(result, value);
+    }
+
+    #[test]
+    fn nested_environments() {
+        let parent_env = Env::new();
+
+        let name = "foo";
+        let value = Val::Int(0);
+
+        // Declare a variable in the parent environment
+        parent_env
+            .borrow_mut()
+            .declare(name.to_string(), value.clone())
+            .expect("should be able to declare variable");
+
+        // Create a child environment with the parent environment
+        let child_env = Env::with_parent(Rc::clone(&parent_env));
+
+        // Lookup the variable from the child environment
+        let result = Env::lookup(&child_env, &name);
+        assert_eq!(result.unwrap(), value.clone());
+
+        // Declare a new variable in the parent environment
+        let name = "bar";
+        let value = Val::Int(0);
+        parent_env
+            .borrow_mut()
+            .declare(name.to_string(), value.clone())
+            .expect("should be able to declare variable");
+
+        // Lookup the new variable from the child environment
+        let result = Env::lookup(&child_env, &name).expect("should be able to lookup variable");
+        assert_eq!(result, value);
     }
 }

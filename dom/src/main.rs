@@ -10,9 +10,11 @@ use interpreter::eval;
 use parser::Parser;
 
 use std::{
+    cell::RefCell,
     fmt::Write as _,
     fs::read_to_string,
     io::{self, Write},
+    rc::Rc,
 };
 
 use clap::Parser as _;
@@ -25,10 +27,10 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    let mut env = Env::default();
+    let env = Rc::new(RefCell::new(Env::default()));
 
     // TODO: Refactor `Env`
-    let _ = env.declare(
+    let _ = env.borrow_mut().declare(
         "print".to_owned(),
         Val::NativeFunc(Box::new(|args, _| {
             let joined = args.iter().fold(String::new(), |mut output, arg| {
@@ -42,13 +44,13 @@ fn main() {
         })),
     );
 
-    let mut result = |contents: String| {
+    let result = |contents: String| {
         let mut parser = Parser::new();
         let program = match parser.produce_ast(contents) {
             Ok(program) => program,
             Err(reason) => panic!("[L{}] {reason}", parser.line()),
         };
-        eval(program, &mut env)
+        eval(program, &env)
     };
 
     if let Some(path) = args.path {

@@ -6,25 +6,27 @@ use web_sys::console;
 
 #[wasm_bindgen]
 pub fn interpret(contents: &str) -> String {
-    let mut env = Env::default();
+    let env = Env::new();
 
-    let _ = env.declare(
-        "print".to_owned(),
-        Val::NativeFunc(Box::new(|args, _| {
-            let joined = args.iter().fold(String::new(), |mut output, arg| {
-                let _ = write!(output, "{arg} ");
-                output
-            });
-            console::log_1(&joined.into());
-            None
-        })),
-    );
+    env.borrow_mut()
+        .declare(
+            "print".to_owned(),
+            Val::NativeFunc(Box::new(|args, _| {
+                let joined = args.iter().fold(String::new(), |mut output, arg| {
+                    let _ = write!(output, "{arg} ");
+                    output
+                });
+                console::log_1(&joined.into());
+                None
+            })),
+        )
+        .expect("should be able to declare `print` function");
 
     let mut parser = Parser::new();
     match parser.produce_ast(contents.to_string()) {
         Ok(program) => {
             let ast = format!("{:#?}", program);
-            let _ = eval(program, &mut env);
+            let _ = eval(program, &env);
             return ast;
         }
         Err(reason) => {
