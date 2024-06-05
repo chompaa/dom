@@ -35,15 +35,20 @@ pub fn eval(statement: impl Into<Stmt>, env: &mut Env) -> Result<Val> {
     match statement.into() {
         Stmt::Program { body } => eval_body(body, env),
         Stmt::Cond(cond) => eval_cond(cond, env),
-        Stmt::Func(func) => eval_func(func, env),
-        Stmt::Loop(_loop) => eval_loop(_loop, env),
-        Stmt::Var(var) => eval_var(var, env),
+        Stmt::Func(Func {
+            ident,
+            params,
+            body,
+            ..
+        }) => eval_func(&ident, params, body, env),
+        Stmt::Loop(Loop { body }) => eval_loop(&body, env),
+        Stmt::Var(Var { ident, value }) => eval_var(ident, *value, env),
         Stmt::Expr(expr) => match expr {
             Expr::Assignment { assignee, value } => eval_assign(*assignee, *value, env),
             Expr::Call { caller, args } => eval_call(*caller, args, env),
             Expr::CmpOp { left, right, op } => eval_cmp_expr(*left, *right, op, env),
             Expr::BinaryOp { left, right, op } => eval_binary_expr(*left, *right, op, env),
-            Expr::Ident(ident) => eval_ident(ident, env),
+            Expr::Ident(ident) => eval_ident(&ident, env),
             Expr::Bool(value) => Ok(Val::Bool(value)),
             Expr::Int(number) => Ok(Val::Int(number)),
             Expr::Str(value) => Ok(Val::Str(value)),
@@ -77,13 +82,11 @@ fn eval_cond(cond: Cond, env: &mut Env) -> Result<Val> {
     Ok(Val::None)
 }
 
-fn eval_func(func: Func, env: &mut Env) -> Result<Val> {
-    let ident = &func.ident;
-
+fn eval_func(ident: &Ident, params: Vec<Ident>, body: Vec<Stmt>, env: &mut Env) -> Result<Val> {
     let func = Val::Func {
         ident: ident.to_owned(),
-        params: func.params,
-        body: func.body,
+        params,
+        body,
         env: Env::with_parent(env.clone()),
     };
 
@@ -92,9 +95,7 @@ fn eval_func(func: Func, env: &mut Env) -> Result<Val> {
     Ok(result?)
 }
 
-fn eval_loop(_loop: Loop, env: &mut Env) -> Result<Val> {
-    let Loop { body } = _loop;
-
+fn eval_loop(body: &Vec<Stmt>, env: &mut Env) -> Result<Val> {
     let mut last = None;
 
     // Used so that we can keep track of what variables existed before the loop
@@ -102,7 +103,7 @@ fn eval_loop(_loop: Loop, env: &mut Env) -> Result<Val> {
     let idents = stored_env.values().keys().collect::<Vec<_>>();
 
     'outer: loop {
-        for stmt in &body {
+        for stmt in body {
             let result = eval(stmt.clone(), env);
 
             match result {
@@ -116,7 +117,7 @@ fn eval_loop(_loop: Loop, env: &mut Env) -> Result<Val> {
         }
 
         // Drop any values that were declared in an iteration
-        env.values_mut().retain(|ident, _| idents.contains(&ident))
+        env.values_mut().retain(|ident, _| idents.contains(&ident));
     }
 
     match last {
@@ -125,9 +126,9 @@ fn eval_loop(_loop: Loop, env: &mut Env) -> Result<Val> {
     }
 }
 
-fn eval_var(var: Var, env: &mut Env) -> Result<Val> {
-    let value = eval(*var.value, env)?;
-    let result = env.declare(var.ident, value)?;
+fn eval_var(ident: Ident, value: Stmt, env: &mut Env) -> Result<Val> {
+    let value = eval(value, env)?;
+    let result = env.declare(ident, value)?;
     Ok(result)
 }
 
@@ -239,14 +240,16 @@ fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &mut Env) -> Res
         //
         // Example: "foo" * 2 -> "foofoo".
         (Val::Str(lhs), Val::Int(rhs)) => {
-            if op == BinaryOp::Mul && rhs > 1 {
+            if op == BinaryOp::Mul && rhs.is_positive() {
+                // Since `rhs` is positive, no need to worry about casting
                 Val::Str(lhs.repeat(rhs as usize))
             } else {
                 return Err(Box::new(InterpreterError::Binary));
             }
         }
         (Val::Int(lhs), Val::Str(rhs)) => {
-            if op == BinaryOp::Mul && lhs > 1 {
+            if op == BinaryOp::Mul && lhs.is_positive() {
+                // Since `lhs` is positive, no need to worry about casting
                 Val::Str(rhs.repeat(lhs as usize))
             } else {
                 return Err(Box::new(InterpreterError::Binary));
@@ -258,7 +261,7 @@ fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &mut Env) -> Res
     Ok(result)
 }
 
-fn eval_ident(ident: Ident, env: &mut Env) -> Result<Val> {
+fn eval_ident(ident: &Ident, env: &mut Env) -> Result<Val> {
     let val = env.lookup(ident)?;
     Ok(val)
 }

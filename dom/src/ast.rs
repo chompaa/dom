@@ -105,6 +105,7 @@ pub enum Expr {
     },
     /// A return expression for functions.
     Return {
+        /// The value returned.
         value: Option<Box<Expr>>,
     },
     /// A continue expression for loops.

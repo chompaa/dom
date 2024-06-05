@@ -59,6 +59,7 @@ impl Default for Parser {
 }
 
 impl Parser {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             line: 1,
@@ -66,6 +67,7 @@ impl Parser {
         }
     }
 
+    #[must_use]
     pub fn line(&self) -> u32 {
         self.line
     }
@@ -88,14 +90,14 @@ impl Parser {
         Ok(program)
     }
 
-    fn process<F>(&mut self, mut _process: F) -> Result<Vec<Stmt>, ParserError>
+    fn process<F>(&mut self, mut p: F) -> Result<Vec<Stmt>, ParserError>
     where
         F: FnMut(&Token) -> Process,
     {
         let mut body = vec![];
 
         while let Some(token) = &self.tokens.front() {
-            match _process(token) {
+            match p(token) {
                 Process::Break => break,
                 Process::Consume => {
                     self.consume();
@@ -125,24 +127,12 @@ impl Parser {
         token
     }
 
-    fn expect(&mut self, token: Token, error: ParserError) -> Result<(), ParserError> {
+    fn expect(&mut self, token: &Token, error: ParserError) -> Result<(), ParserError> {
         if self.tokens.is_empty() {
             return Err(error);
         }
 
-        if self.consume() != token {
-            return Err(error);
-        }
-
-        Ok(())
-    }
-
-    fn expect_not(&mut self, token: Token, error: ParserError) -> Result<(), ParserError> {
-        if self.tokens.is_empty() {
-            return Err(error);
-        }
-
-        if self.consume() == token {
+        if &self.consume() != token {
             return Err(error);
         }
 
@@ -169,7 +159,7 @@ impl Parser {
         // Consume the `loop` keyword
         self.consume();
 
-        self.expect(Token::LeftBrace, ParserError::FnBlockBegin)?;
+        self.expect(&Token::LeftBrace, ParserError::FnBlockBegin)?;
 
         let body = self.process(|token| match token {
             Token::RightBrace => Process::Break,
@@ -177,7 +167,7 @@ impl Parser {
             _ => Process::Push,
         })?;
 
-        self.expect(Token::RightBrace, ParserError::FnBlockEnd)?;
+        self.expect(&Token::RightBrace, ParserError::FnBlockEnd)?;
 
         Ok(Loop { body })
     }
@@ -190,7 +180,7 @@ impl Parser {
             return Err(ParserError::FnIdentifier);
         };
 
-        self.expect(Token::LeftParen, ParserError::FnArgsBegin)?;
+        self.expect(&Token::LeftParen, ParserError::FnArgsBegin)?;
 
         let params: Result<Vec<Ident>, ()> = self
             .parse_args()?
@@ -205,7 +195,7 @@ impl Parser {
             return Err(ParserError::FnArgs);
         };
 
-        self.expect(Token::LeftBrace, ParserError::FnBlockBegin)?;
+        self.expect(&Token::LeftBrace, ParserError::FnBlockBegin)?;
 
         let body = self.process(|token| match token {
             Token::RightBrace => Process::Break,
@@ -213,7 +203,7 @@ impl Parser {
             _ => Process::Push,
         })?;
 
-        self.expect(Token::RightBrace, ParserError::FnBlockEnd)?;
+        self.expect(&Token::RightBrace, ParserError::FnBlockEnd)?;
 
         let func = Func {
             ident,
@@ -239,10 +229,10 @@ impl Parser {
         while self.peek() == Some(&Token::Separator) {
             self.consume();
             // TODO: Better error handling for no more tokens
-            args.push(self.parse_assignment_expr()?)
+            args.push(self.parse_assignment_expr()?);
         }
 
-        self.expect(Token::RightParen, ParserError::FnArgsEnd)?;
+        self.expect(&Token::RightParen, ParserError::FnArgsEnd)?;
 
         Ok(args)
     }
@@ -253,7 +243,7 @@ impl Parser {
 
         let condition = self.parse_expr()?;
 
-        self.expect(Token::LeftBrace, ParserError::FnBlockBegin)?;
+        self.expect(&Token::LeftBrace, ParserError::FnBlockBegin)?;
 
         let body = self.process(|token| match token {
             Token::RightBrace => Process::Break,
@@ -261,7 +251,7 @@ impl Parser {
             _ => Process::Push,
         })?;
 
-        self.expect(Token::RightBrace, ParserError::FnBlockEnd)?;
+        self.expect(&Token::RightBrace, ParserError::FnBlockEnd)?;
 
         let cond = Cond { condition, body };
 
@@ -276,14 +266,14 @@ impl Parser {
             return Err(ParserError::VarIdentifier);
         };
 
-        self.expect(Token::Assignment, ParserError::VarAssign)?;
+        self.expect(&Token::Assignment, ParserError::VarAssign)?;
 
         let var = Var {
             ident,
             value: Box::new(self.parse_expr()?.into()),
         };
 
-        self.expect(Token::EndOfLine, ParserError::VarEndOfLine)?;
+        self.expect(&Token::EndOfLine, ParserError::VarEndOfLine)?;
 
         Ok(var)
     }

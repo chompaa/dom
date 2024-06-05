@@ -83,6 +83,7 @@ pub struct Env {
 
 impl Env {
     /// Creates a new environment with the given parent environment.
+    #[must_use]
     pub fn with_parent(parent: Env) -> Self {
         Self {
             parent: Some(Box::new(parent)),
@@ -91,6 +92,7 @@ impl Env {
     }
 
     /// Returns a reference to the values stored in this environment.
+    #[must_use]
     pub fn values(&self) -> &HashMap<String, Val> {
         &self.values
     }
@@ -129,13 +131,13 @@ impl Env {
     /// Looks up the value of the variable with the given name.
     ///
     /// Returns an error if no variable with the given name exists in this environment or its parents.
-    pub fn lookup(&self, name: String) -> Result<Val, EnvError> {
+    pub fn lookup(&self, name: &str) -> Result<Val, EnvError> {
         // Find the environment where the variable is declared.
-        let env = self.resolve(&name)?;
+        let env = self.resolve(name)?;
 
         let value = env
             .values
-            .get(&name)
+            .get(name)
             .expect("Environment should contain identifier");
 
         Ok(value.clone())
