@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::{
-    ast::{Cond, Expr, Func, Ident, Loop, Return, Stmt, Var},
+    ast::{Cond, Expr, Func, Ident, Loop, Stmt, Var},
     environment::{Env, Val},
     lexer::{BinaryOp, CmpOp},
     util::Result,
@@ -19,8 +19,6 @@ pub enum InterpreterError {
     Args,
     #[error("caller is not a defined function")]
     Caller,
-    #[error("expression {0:?} cannot be evaluated")]
-    Eval(Expr),
 }
 
 #[derive(Error, Debug)]
@@ -29,6 +27,8 @@ pub enum Exception {
     Break,
     #[error("cannot continue out of non-loop")]
     Continue,
+    #[error("cannot return out of non-func")]
+    Return(Option<Box<Expr>>),
 }
 
 pub fn eval(statement: impl Into<Stmt>, env: &mut Env) -> Result<Val> {
@@ -36,7 +36,6 @@ pub fn eval(statement: impl Into<Stmt>, env: &mut Env) -> Result<Val> {
         Stmt::Program { body } => eval_body(body, env),
         Stmt::Cond(cond) => eval_cond(cond, env),
         Stmt::Func(func) => eval_func(func, env),
-        Stmt::Return(_return) => eval_return(_return, env),
         Stmt::Loop(_loop) => eval_loop(_loop, env),
         Stmt::Var(var) => eval_var(var, env),
         Stmt::Expr(expr) => match expr {
@@ -48,27 +47,18 @@ pub fn eval(statement: impl Into<Stmt>, env: &mut Env) -> Result<Val> {
             Expr::Bool(value) => Ok(Val::Bool(value)),
             Expr::Int(number) => Ok(Val::Int(number)),
             Expr::Str(value) => Ok(Val::Str(value)),
+            Expr::Return { value } => Err(Box::new(Exception::Return(value))),
             Expr::Continue => Err(Box::new(Exception::Continue)),
             Expr::Break => Err(Box::new(Exception::Break)),
-            _ => Err(Box::new(InterpreterError::Eval(expr))),
         },
     }
 }
 
 fn eval_body(body: Vec<Stmt>, env: &mut Env) -> Result<Val> {
-    let mut last = None;
-
-    for stmt in body {
-        if let Stmt::Return(_) = stmt {
-            return eval(stmt, env);
-        }
-        last = Some(eval(stmt, env)?);
-    }
-
-    match last {
-        Some(val) => Ok(val),
-        None => Ok(Val::None),
-    }
+    body.into_iter()
+        .map(|stmt| eval(stmt, env))
+        .last()
+        .unwrap_or(Ok(Val::None))
 }
 
 fn eval_cond(cond: Cond, env: &mut Env) -> Result<Val> {
@@ -79,8 +69,7 @@ fn eval_cond(cond: Cond, env: &mut Env) -> Result<Val> {
     };
 
     if success {
-        let scope = &mut Env::with_parent(env.clone());
-        let result = eval_body(body, scope)?;
+        let result = eval_body(body, env)?;
 
         return Ok(result);
     }
@@ -95,24 +84,12 @@ fn eval_func(func: Func, env: &mut Env) -> Result<Val> {
         ident: ident.to_owned(),
         params: func.params,
         body: func.body,
-        // TODO: Remove this clone
         env: Env::with_parent(env.clone()),
     };
 
     let result = env.declare(ident.to_owned(), func);
 
     Ok(result?)
-}
-
-fn eval_return(_return: Return, env: &mut Env) -> Result<Val> {
-    let Return { value } = _return;
-
-    let result = match value {
-        Some(value) => eval(value, env)?,
-        None => Val::None,
-    };
-
-    Ok(result)
 }
 
 fn eval_loop(_loop: Loop, env: &mut Env) -> Result<Val> {
@@ -126,23 +103,15 @@ fn eval_loop(_loop: Loop, env: &mut Env) -> Result<Val> {
 
     'outer: loop {
         for stmt in &body {
-            if let Stmt::Return(_) = stmt {
-                return eval(stmt.clone(), env);
-            }
-
             let result = eval(stmt.clone(), env);
 
             match result {
                 Ok(result) => last = Some(result),
-                Err(kind) => {
-                    if let Some(exception) = kind.downcast_ref::<Exception>() {
-                        match exception {
-                            Exception::Continue => continue 'outer,
-                            Exception::Break => break 'outer,
-                        }
-                    }
-                    return Err(kind);
-                }
+                Err(kind) => match kind.downcast_ref() {
+                    Some(Exception::Continue) => continue 'outer,
+                    Some(Exception::Break) => break 'outer,
+                    _ => return Err(kind),
+                },
             }
         }
 
@@ -186,10 +155,35 @@ fn eval_call(caller: Expr, args: Vec<Expr>, env: &mut Env) -> Result<Val> {
             params, body, env, ..
         } => {
             let mut env = env;
+
             for (param, arg) in params.into_iter().zip(args.into_iter()) {
                 env.declare(param, arg)?;
             }
-            eval_body(body, &mut env)
+
+            let mut last = None;
+
+            for stmt in body {
+                let result = eval(stmt, &mut env);
+
+                match result {
+                    Ok(result) => last = Some(result),
+                    Err(kind) => match kind.downcast_ref() {
+                        Some(Exception::Return(value)) => {
+                            last = match value {
+                                Some(value) => Some(eval(*value.clone(), &mut env)?),
+                                None => None,
+                            };
+                            break;
+                        }
+                        _ => return Err(kind),
+                    },
+                }
+            }
+
+            match last {
+                Some(val) => Ok(val),
+                None => Ok(Val::None),
+            }
         }
         _ => Err(Box::new(InterpreterError::Caller)),
     }

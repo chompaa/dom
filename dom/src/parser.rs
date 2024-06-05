@@ -14,7 +14,7 @@ use std::i32;
 
 use thiserror::Error;
 
-use crate::ast::{Cond, Expr, Func, Ident, Loop, Return, Stmt, Var};
+use crate::ast::{Cond, Expr, Func, Ident, Loop, Stmt, Var};
 use crate::lexer::{BinaryOp, Lexer, Token};
 
 #[derive(Error, Debug)]
@@ -50,6 +50,12 @@ enum Process {
 pub struct Parser {
     line: u32,
     tokens: VecDeque<Token>,
+}
+
+impl Default for Parser {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Parser {
@@ -152,7 +158,6 @@ impl Parser {
             Token::Let => Stmt::Var(self.parse_var()?),
             Token::Cond => Stmt::Cond(self.parse_cond()?),
             Token::Func => Stmt::Func(self.parse_func()?),
-            Token::Return => Stmt::Return(self.parse_return()?),
             Token::Loop => Stmt::Loop(self.parse_loop()?),
             _ => Stmt::Expr(self.parse_expr()?),
         };
@@ -175,22 +180,6 @@ impl Parser {
         self.expect(Token::RightBrace, ParserError::FnBlockEnd)?;
 
         Ok(Loop { body })
-    }
-
-    fn parse_return(&mut self) -> Result<Return, ParserError> {
-        // Consume the `return` keyword
-        self.consume();
-
-        if self.peek() == Some(&Token::EndOfLine) {
-            let result = Return { value: None };
-            return Ok(result);
-        }
-
-        let result = Return {
-            value: Some(self.parse_expr()?),
-        };
-
-        Ok(result)
     }
 
     fn parse_func(&mut self) -> Result<Func, ParserError> {
@@ -437,6 +426,13 @@ impl Parser {
                 // Consume closing parenthesis
                 self.consume();
                 expr
+            }
+            Token::Return => {
+                let value = match self.peek() {
+                    Some(Token::EndOfLine) => None,
+                    _ => Some(Box::new(self.parse_expr()?)),
+                };
+                Expr::Return { value }
             }
             Token::Continue => Expr::Continue,
             Token::Break => Expr::Break,

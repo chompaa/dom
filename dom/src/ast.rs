@@ -12,8 +12,6 @@ pub enum Stmt {
     Cond(Cond),
     /// A callable function.
     Func(Func),
-    /// A return statement.
-    Return(Return),
     /// A loop statement.
     Loop(Loop),
     /// A variable declaration.
@@ -47,13 +45,6 @@ pub struct Func {
     pub params: Vec<Ident>,
     /// The body of the function.
     pub body: Vec<Stmt>,
-}
-
-/// A return statement.
-#[derive(Debug, Clone)]
-pub struct Return {
-    /// The value returned.
-    pub value: Option<Expr>,
 }
 
 /// A loop statement.
@@ -111,6 +102,10 @@ pub enum Expr {
         right: Box<Expr>,
         /// The binary operation itself.
         op: BinaryOp,
+    },
+    /// A return expression for functions.
+    Return {
+        value: Option<Box<Expr>>,
     },
     /// A continue expression for loops.
     Continue,
