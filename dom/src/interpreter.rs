@@ -79,7 +79,9 @@ fn eval_cond(cond: Cond, env: &mut Env) -> Result<Val> {
     };
 
     if success {
-        let result = eval_body(body, env)?;
+        let scope = &mut Env::with_parent(env.clone());
+        let result = eval_body(body, scope)?;
+
         return Ok(result);
     }
 
@@ -118,12 +120,18 @@ fn eval_loop(_loop: Loop, env: &mut Env) -> Result<Val> {
 
     let mut last = None;
 
+    // Used so that we can keep track of what variables existed before the loop
+    let stored_env = env.clone();
+    let idents = stored_env.values().keys().collect::<Vec<_>>();
+
     'outer: loop {
         for stmt in &body {
             if let Stmt::Return(_) = stmt {
                 return eval(stmt.clone(), env);
             }
+
             let result = eval(stmt.clone(), env);
+
             match result {
                 Ok(result) => last = Some(result),
                 Err(kind) => {
@@ -137,6 +145,9 @@ fn eval_loop(_loop: Loop, env: &mut Env) -> Result<Val> {
                 }
             }
         }
+
+        // Drop any values that were declared in an iteration
+        env.values_mut().retain(|ident, _| idents.contains(&ident))
     }
 
     match last {

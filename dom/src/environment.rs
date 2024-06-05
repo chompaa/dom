@@ -90,6 +90,16 @@ impl Env {
         }
     }
 
+    /// Returns a reference to the values stored in this environment.
+    pub fn values(&self) -> &HashMap<String, Val> {
+        &self.values
+    }
+
+    /// Returns a mutable reference to the values stored in the environment.
+    pub fn values_mut(&mut self) -> &mut HashMap<String, Val> {
+        &mut self.values
+    }
+
     /// Declares a new variable with the given name and value.
     ///
     /// Returns an error if a variable with the same name already exists in this environment.
