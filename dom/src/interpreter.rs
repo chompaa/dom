@@ -229,16 +229,18 @@ fn eval_cmp_expr(left: Expr, right: Expr, op: CmpOp, env: &Rc<RefCell<Env>>) -> 
 fn eval_unary_expr(expr: Expr, op: UnaryOp, env: &Rc<RefCell<Env>>) -> Result<Val> {
     let result = eval(expr, env)?;
 
-    if let Val::Int(value) = result {
-        let result = match op {
-            UnaryOp::Pos => result,
-            UnaryOp::Neg => Val::Int(-value),
-        };
-
-        return Ok(result);
-    };
-
-    Err(Box::new(InterpreterError::Unary))
+    match result {
+        Val::Int(value) => match op {
+            UnaryOp::Pos => Ok(result),
+            UnaryOp::Neg => Ok(Val::Int(-value)),
+            _ => Err(Box::new(InterpreterError::Unary)),
+        },
+        Val::Bool(value) => match op {
+            UnaryOp::Not => Ok(Val::Bool(!value)),
+            _ => Err(Box::new(InterpreterError::Unary)),
+        },
+        _ => Err(Box::new(InterpreterError::Unary)),
+    }
 }
 
 fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &Rc<RefCell<Env>>) -> Result<Val> {

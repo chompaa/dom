@@ -369,10 +369,11 @@ impl Parser {
 
     fn parse_unary_expr(&mut self) -> Result<Expr, ParserError> {
         match self.peek() {
-            Some(&Token::Plus | &Token::Minus) => {
+            Some(&Token::Plus | &Token::Minus | &Token::Bang) => {
                 let op = match self.consume() {
                     Token::Plus => UnaryOp::Pos,
                     Token::Minus => UnaryOp::Neg,
+                    Token::Bang => UnaryOp::Not,
                     _ => unreachable!(),
                 };
                 Ok(Expr::UnaryOp {

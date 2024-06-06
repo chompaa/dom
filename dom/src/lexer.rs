@@ -44,6 +44,7 @@ pub enum Token {
     Minus,
     Star,
     Slash,
+    Bang,
     CmpOp(CmpOp),
     Assignment,
     Separator,
@@ -222,7 +223,7 @@ impl Lexer {
                     self.read_char();
                     Token::CmpOp(CmpOp::NotEq)
                 }
-                _ => return Err(LexerError::InvalidToken(self.ch)),
+                _ => Token::Bang,
             },
             '<' => match self.peek_char() {
                 '=' => {

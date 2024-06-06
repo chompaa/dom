@@ -75,6 +75,7 @@ pub enum BinaryOp {
 pub enum UnaryOp {
     Pos,
     Neg,
+    Not,
 }
 
 /// An expression in the abstract syntax tree.
