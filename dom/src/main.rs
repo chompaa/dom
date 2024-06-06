@@ -38,7 +38,7 @@ fn main() {
                 output
             });
 
-            println!("{}", &joined.trim());
+            println!("{}", &joined);
 
             None
         })),

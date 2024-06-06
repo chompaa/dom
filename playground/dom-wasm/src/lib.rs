@@ -16,7 +16,7 @@ pub fn interpret(contents: &str) -> String {
                     let _ = write!(output, "{arg} ");
                     output
                 });
-                console::log_1(&joined.trim().into());
+                console::log_1(&joined.into());
                 None
             })),
         )
