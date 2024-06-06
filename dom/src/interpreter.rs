@@ -17,8 +17,12 @@ pub enum InterpreterError {
     Unary,
     #[error("binary expression unsupported")]
     Binary,
-    #[error("comparison expressions can only contain integers or references to integers")]
-    Cmp,
+    #[error("there are no supported comparison operations for `{0:?}` and `{1:?}`")]
+    Cmp(Val, Val),
+    #[error("only `==` and `!=` is supported for bools")]
+    CmpBool,
+    #[error("only `==` and `!=` is supported for str")]
+    CmpStr,
     #[error("could not interpret arguments")]
     Args,
     #[error("caller is not a defined function")]
@@ -75,7 +79,7 @@ fn eval_cond(cond: Cond, env: &Rc<RefCell<Env>>) -> Result<Val> {
     let Cond { condition, body } = cond;
 
     let Val::Bool(success) = eval(condition, env)? else {
-        return Err(Box::new(InterpreterError::Cmp));
+        unreachable!("`Val::Bool` should be returned from condition evaluation");
     };
 
     if success {
@@ -197,18 +201,26 @@ fn eval_cmp_expr(left: Expr, right: Expr, op: CmpOp, env: &Rc<RefCell<Env>>) -> 
     let lhs = eval(left, env)?;
     let rhs = eval(right, env)?;
 
-    let (lhs, rhs) = match (lhs, rhs) {
-        (Val::Int(lhs), Val::Int(rhs)) => (lhs, rhs),
-        _ => return Err(Box::new(InterpreterError::Cmp)),
-    };
-
-    let result = match op {
-        CmpOp::Eq => lhs == rhs,
-        CmpOp::NotEq => lhs != rhs,
-        CmpOp::Greater => lhs > rhs,
-        CmpOp::GreaterEq => lhs >= rhs,
-        CmpOp::Less => lhs < rhs,
-        CmpOp::LessEq => lhs <= rhs,
+    let result = match (&lhs, &rhs) {
+        (Val::Bool(lhs), Val::Bool(rhs)) => match op {
+            CmpOp::Eq => lhs == rhs,
+            CmpOp::NotEq => lhs != rhs,
+            _ => return Err(Box::new(InterpreterError::CmpBool)),
+        },
+        (Val::Int(lhs), Val::Int(rhs)) => match op {
+            CmpOp::Eq => lhs == rhs,
+            CmpOp::NotEq => lhs != rhs,
+            CmpOp::Greater => lhs > rhs,
+            CmpOp::GreaterEq => lhs >= rhs,
+            CmpOp::Less => lhs < rhs,
+            CmpOp::LessEq => lhs <= rhs,
+        },
+        (Val::Str(lhs), Val::Str(rhs)) => match op {
+            CmpOp::Eq => lhs == rhs,
+            CmpOp::NotEq => lhs != rhs,
+            _ => return Err(Box::new(InterpreterError::CmpStr)),
+        },
+        _ => return Err(Box::new(InterpreterError::Cmp(lhs, rhs))),
     };
 
     Ok(Val::Bool(result))
