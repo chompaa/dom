@@ -16,14 +16,24 @@ You can try Dom for yourself using the playground [here](https://chompaa.github.
     - [x] Integers
     - [ ] Floats
     - [x] Strings
-- [x] Mutable variables
-- [x] Binary operations/expressions
-- [ ] Conditional statements
-    - [x] Single conditions
-    - [ ] Multiple conditions
+- [ ] Variables
+    - [x] Mutable
+    - [ ] Constant
+- [x] Comparisons
+- [x] Unary expressions
+- [x] Binary expressions
+- [x] Scope
 - [x] Functions
-    - [x] Returns
+    - [x] Defined
+    - [x] Built-in
 - [x] Loops
+- [ ] Control flow
+    - [ ] Conditional statements
+        - [x] Single conditions
+        - [ ] Multiple conditions
+    - [x] Return
+    - [x] Continue
+    - [x] Break
 
 ## Syntax
 
