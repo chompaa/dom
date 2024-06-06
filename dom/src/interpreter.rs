@@ -270,7 +270,7 @@ fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &Rc<RefCell<Env>
         //
         // Example: "foo" * 2 -> "foofoo".
         (Val::Str(lhs), Val::Int(rhs)) => {
-            if op == BinaryOp::Mul && rhs.is_positive() {
+            if op == BinaryOp::Mul && rhs >= 0 {
                 // Since `rhs` is positive, no need to worry about casting
                 Val::Str(lhs.repeat(rhs as usize))
             } else {
@@ -278,7 +278,7 @@ fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &Rc<RefCell<Env>
             }
         }
         (Val::Int(lhs), Val::Str(rhs)) => {
-            if op == BinaryOp::Mul && lhs.is_positive() {
+            if op == BinaryOp::Mul && lhs >= 0 {
                 // Since `lhs` is positive, no need to worry about casting
                 Val::Str(rhs.repeat(lhs as usize))
             } else {
