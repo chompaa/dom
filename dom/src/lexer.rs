@@ -160,7 +160,7 @@ impl Lexer {
     }
 
     fn read_str(&mut self) -> Result<String, LexerError> {
-        let start = self.position;
+        let mut result = String::new();
         // Consume opening quote.
         self.read_char();
 
@@ -168,21 +168,23 @@ impl Lexer {
             match self.ch {
                 '\0' => return Err(LexerError::UnterminatedString),
                 '\\' => {
-                    // Consume escape char
+                    // Read escape char.
                     self.read_char();
                     match self.ch {
-                        '"' | '\\' | 'n' | 't' | 'r' => self.read_char(),
+                        '"' => result.push('"'),
+                        '\\' => result.push('\\'),
+                        'n' => result.push('\n'),
+                        't' => result.push('\t'),
+                        'r' => result.push('\r'),
                         _ => return Err(LexerError::InvalidEscapeSequence(self.ch)),
                     }
                 }
-                _ => self.read_char(),
+                _ => result.push(self.ch),
             }
+            self.read_char();
         }
 
-        // Omit the start and end quotes.
-        Ok(self.buffer[start + 1..self.cursor - 1]
-            .iter()
-            .collect::<String>())
+        Ok(result)
     }
 
     /// Consumes all whitespace characters until a non-whitespace character is read.

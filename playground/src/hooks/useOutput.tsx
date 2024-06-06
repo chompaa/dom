@@ -4,7 +4,7 @@ const useOutput = () => {
   const [output, setOutput] = useState("");
 
   const writeOutput = (text: string) => {
-    setOutput((output) => `${output}${text}\n`);
+    setOutput((output) => output.concat(text, "\n"));
   };
 
   const clearOutput = () => {
