@@ -3,9 +3,9 @@ use std::{cell::RefCell, rc::Rc};
 use thiserror::Error;
 
 use crate::{
-    ast::{Cond, Expr, Func, Ident, Loop, Stmt, Var},
+    ast::{BinaryOp, Cond, Expr, Func, Ident, Loop, Stmt, UnaryOp, Var},
     environment::{Env, Val},
-    lexer::{BinaryOp, CmpOp},
+    lexer::CmpOp,
     util::Result,
 };
 
@@ -13,6 +13,8 @@ use crate::{
 pub enum InterpreterError {
     #[error("missing identifier in assignment")]
     Assignment,
+    #[error("unary expression unsupported")]
+    Unary,
     #[error("binary expression unsupported")]
     Binary,
     #[error("comparison expressions can only contain integers or references to integers")]
@@ -49,6 +51,7 @@ pub fn eval(statement: impl Into<Stmt>, env: &Rc<RefCell<Env>>) -> Result<Val> {
             Expr::Assignment { assignee, value } => eval_assign(*assignee, *value, env),
             Expr::Call { caller, args } => eval_call(*caller, args, env),
             Expr::CmpOp { left, right, op } => eval_cmp_expr(*left, *right, op, env),
+            Expr::UnaryOp { expr, op } => eval_unary_expr(*expr, op, env),
             Expr::BinaryOp { left, right, op } => eval_binary_expr(*left, *right, op, env),
             Expr::Ident(ident) => eval_ident(&ident, env),
             Expr::Bool(value) => Ok(Val::Bool(value)),
@@ -209,6 +212,21 @@ fn eval_cmp_expr(left: Expr, right: Expr, op: CmpOp, env: &Rc<RefCell<Env>>) -> 
     };
 
     Ok(Val::Bool(result))
+}
+
+fn eval_unary_expr(expr: Expr, op: UnaryOp, env: &Rc<RefCell<Env>>) -> Result<Val> {
+    let result = eval(expr, env)?;
+
+    if let Val::Int(value) = result {
+        let result = match op {
+            UnaryOp::Pos => result,
+            UnaryOp::Neg => Val::Int(-value),
+        };
+
+        return Ok(result);
+    };
+
+    Err(Box::new(InterpreterError::Unary))
 }
 
 fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &Rc<RefCell<Env>>) -> Result<Val> {

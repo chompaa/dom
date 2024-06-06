@@ -13,14 +13,6 @@ pub enum LexerError {
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
-pub enum BinaryOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-}
-
-#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum CmpOp {
     Eq,
     NotEq,
@@ -48,7 +40,10 @@ pub enum Token {
     Break,
 
     // Operators
-    BinaryOp(BinaryOp),
+    Plus,
+    Minus,
+    Star,
+    Slash,
     CmpOp(CmpOp),
     Assignment,
     Separator,
@@ -203,15 +198,15 @@ impl Lexer {
 
         let token = match self.ch {
             '\0' => Token::EndOfFile,
-            '+' => Token::BinaryOp(BinaryOp::Add),
-            '-' => Token::BinaryOp(BinaryOp::Sub),
-            '*' => Token::BinaryOp(BinaryOp::Mul),
+            '+' => Token::Plus,
+            '-' => Token::Minus,
+            '*' => Token::Star,
             '/' => match self.peek_char() {
                 '/' => {
                     self.read_comment();
                     return self.next();
                 }
-                _ => Token::BinaryOp(BinaryOp::Div),
+                _ => Token::Slash,
             },
             '=' => match self.peek_char() {
                 '=' => {

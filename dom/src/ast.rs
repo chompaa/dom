@@ -1,4 +1,4 @@
-use crate::lexer::{BinaryOp, CmpOp};
+use crate::lexer::CmpOp;
 
 /// An identifier (e.g. a variable name).
 pub type Ident = String;
@@ -63,6 +63,20 @@ pub struct Var {
     pub value: Box<Stmt>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum UnaryOp {
+    Pos,
+    Neg,
+}
+
 /// An expression in the abstract syntax tree.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -93,6 +107,13 @@ pub enum Expr {
         right: Box<Expr>,
         /// The comparison operation itself.
         op: CmpOp,
+    },
+    /// A unary operation expression.
+    UnaryOp {
+        /// The expression of the unary operation.
+        expr: Box<Expr>,
+        /// The unary operation itself.
+        op: UnaryOp,
     },
     /// A binary operation expression.
     BinaryOp {

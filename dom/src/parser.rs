@@ -1,21 +1,21 @@
 //! Parser used to produce an AST from a token stream
 //!
-//! Order of precedence:
-//! - Assignment
-//! - Block
-//! - Comparison
-//! - Addition
-//! - Multiplication
-//! - Call
-//! - Primary
+//! Order of precedence (low to high):
+//! - Assignments
+//! - Comparison Operators
+//! - Binary Addition
+//! - Binary Multiplication
+//! - Unary Operators
+//! - Function Call
+//! - Primary Expressions
 
 use std::collections::VecDeque;
 use std::i32;
 
 use thiserror::Error;
 
-use crate::ast::{Cond, Expr, Func, Ident, Loop, Stmt, Var};
-use crate::lexer::{BinaryOp, Lexer, Token};
+use crate::ast::{BinaryOp, Cond, Expr, Func, Ident, Loop, Stmt, UnaryOp, Var};
+use crate::lexer::{Lexer, Token};
 
 #[derive(Error, Debug)]
 pub enum ParserError {
@@ -306,7 +306,9 @@ impl Parser {
             return Ok(left);
         };
 
+        // Consume the operator
         self.consume();
+
         let right = self.parse_additive_expr()?;
         left = Expr::CmpOp {
             left: Box::new(left),
@@ -320,22 +322,16 @@ impl Parser {
     fn parse_additive_expr(&mut self) -> Result<Expr, ParserError> {
         let mut left = self.parse_multiplicative_expr()?;
 
-        loop {
-            let Some(token) = self.peek() else {
-                break;
-            };
-
+        while let Some(token) = self.peek() {
             let op = match token {
-                Token::BinaryOp(op) => {
-                    if *op != BinaryOp::Add && *op != BinaryOp::Sub {
-                        break;
-                    }
-                    *op
-                }
+                Token::Plus => BinaryOp::Add,
+                Token::Minus => BinaryOp::Sub,
                 _ => break,
             };
 
+            // Consume the operator
             self.consume();
+
             let right = self.parse_multiplicative_expr()?;
             left = Expr::BinaryOp {
                 left: Box::new(left),
@@ -348,25 +344,19 @@ impl Parser {
     }
 
     fn parse_multiplicative_expr(&mut self) -> Result<Expr, ParserError> {
-        let mut left = self.parse_call_expr()?;
+        let mut left = self.parse_unary_expr()?;
 
-        loop {
-            let Some(token) = self.peek() else {
-                break;
-            };
-
+        while let Some(token) = self.peek() {
             let op = match token {
-                Token::BinaryOp(op) => {
-                    if *op != BinaryOp::Mul && *op != BinaryOp::Div {
-                        break;
-                    }
-                    *op
-                }
+                Token::Star => BinaryOp::Mul,
+                Token::Slash => BinaryOp::Div,
                 _ => break,
             };
 
+            // Consume the operator
             self.consume();
-            let right = self.parse_multiplicative_expr()?;
+
+            let right = self.parse_unary_expr()?;
             left = Expr::BinaryOp {
                 left: Box::new(left),
                 right: Box::new(right),
@@ -375,6 +365,24 @@ impl Parser {
         }
 
         Ok(left)
+    }
+
+    fn parse_unary_expr(&mut self) -> Result<Expr, ParserError> {
+        match self.peek() {
+            Some(&Token::Plus | &Token::Minus) => {
+                let op = match self.consume() {
+                    Token::Plus => UnaryOp::Pos,
+                    Token::Minus => UnaryOp::Neg,
+                    _ => unreachable!(),
+                };
+                Ok(Expr::UnaryOp {
+                    // We should keep parsing as many unary operators as we can
+                    expr: Box::new(self.parse_unary_expr()?),
+                    op,
+                })
+            }
+            _ => self.parse_call_expr(),
+        }
     }
 
     fn parse_call_expr(&mut self) -> Result<Expr, ParserError> {
