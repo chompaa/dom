@@ -1,11 +1,12 @@
-import { interpret } from "dom-wasm";
+import { interpret, set_hook } from "dom-wasm";
 import { editor } from "monaco-editor";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import "./App.css";
 import Editor from "./components/Editor";
 import TabItem from "./components/TabItem";
 import TabList from "./components/TabList";
 import useOutput from "./hooks/useOutput";
+import Ansi from "ansi-to-react";
 
 const App = () => {
   const editorRef = useRef<null | editor.IStandaloneCodeEditor>(null);
@@ -25,6 +26,10 @@ const App = () => {
     setAst(ast);
   };
 
+  useEffect(() => {
+    set_hook();
+  }, []);
+
   return (
     <main className="h-screen flex flex-row bg-white">
       <section className="w-full relative border-r-2 border-gray-100 flex flex-col">
@@ -43,7 +48,9 @@ const App = () => {
       <section className="flex flex-col w-full max-h-full relative bg-white border-l-2 border-gray-100 overflow-x-scroll">
         <TabList activeTabIndex={0}>
           <TabItem label="output">
-            <pre className="font-primary text-2xl">{output}</pre>
+            <pre>
+              <Ansi className="font-primary text-2xl">{output}</Ansi>
+            </pre>
           </TabItem>
           <TabItem label="ast">
             <pre className="font-primary text-2xl">{ast}</pre>

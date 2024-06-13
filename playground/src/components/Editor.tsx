@@ -117,7 +117,7 @@ print_sequence(10)`;
       beforeMount={handleEditorWillMount}
       theme="gruvbox-light"
       options={{
-        fontFamily: "Iosevka Web",
+        fontFamily: "Iosevka",
         fontSize: 24,
         minimap: { enabled: false },
         wordWrap: "on",

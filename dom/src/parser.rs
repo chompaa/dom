@@ -12,33 +12,126 @@
 use std::collections::VecDeque;
 use std::i32;
 
+use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
-use crate::ast::{BinaryOp, Cond, Expr, Func, Ident, Loop, Stmt, UnaryOp, Var};
-use crate::lexer::{Lexer, Token};
+use crate::ast::{BinaryOp, Cond, Expr, ExprKind, Func, Ident, Loop, Stmt, UnaryOp, Var};
+use crate::lexer::{Lexer, Token, TokenKind};
 
-#[derive(Error, Debug)]
+#[derive(Error, Diagnostic, Debug)]
 pub enum ParserError {
-    #[error("expected identifier following `fn` keyword")]
-    FnIdentifier,
-    #[error("expected left parenthesis '(' following function declaration")]
-    FnArgsBegin,
-    #[error("expected identifiers in function arguments")]
-    FnArgs,
-    #[error("expected right parenthesis ')' to end argument list")]
-    FnArgsEnd,
-    #[error("expected left brace '{{' following function arguments")]
-    FnBlockBegin,
-    #[error("expected right brace '}}' to end function block")]
-    FnBlockEnd,
-    #[error("expected identifier following `let` keyword")]
-    VarIdentifier,
-    #[error("expected assignment operator '=' following identifier in variable declaration")]
-    VarAssign,
-    #[error("expected newline '\\n' at end of variable declaration")]
-    VarEndOfLine,
-    #[error("token {0:?} is unsupported")]
-    Unsupported(Token),
+    #[error("expected left brace `{{` following conditional statement")]
+    #[diagnostic(code(parser::cond_block_begin))]
+    CondBlockBegin {
+        #[source_code]
+        src: String,
+        #[label("this conditional is missing a `{{` to start its body")]
+        span: SourceSpan,
+    },
+    #[error("expected right brace `}}` to end conditional block")]
+    #[diagnostic(code(parser::cond_block_end))]
+    CondBlockEnd {
+        #[source_code]
+        src: String,
+        #[label("this conditional is missing a `}}` to end its body")]
+        span: SourceSpan,
+    },
+    #[error("invalid identifier following `fn` keyword")]
+    #[diagnostic(code(parser::fn_identifier))]
+    FnIdentifier {
+        #[source_code]
+        src: String,
+        #[label("invalid identifier here")]
+        span: SourceSpan,
+    },
+    #[error("expected left parenthesis `(` following identifier to begin function arguments")]
+    #[diagnostic(code(parser::fn_args_begin))]
+    FnArgsBegin {
+        #[source_code]
+        src: String,
+        #[label("expected `(` following this identifier")]
+        span: SourceSpan,
+    },
+    #[error("expected only identifiers in function arguments")]
+    #[diagnostic(code(parser::fn_args))]
+    FnArgs {
+        #[source_code]
+        src: String,
+        #[label("this function has non-identifier arguments")]
+        span: SourceSpan,
+    },
+    #[error("expected right parenthesis `)` to end argument list")]
+    #[diagnostic(code(parser::fn_args_end))]
+    FnArgsEnd {
+        #[source_code]
+        src: String,
+        #[label("this function's arguments are never ended")]
+        span: SourceSpan,
+    },
+    #[error("expected left brace `{{` following function arguments")]
+    #[diagnostic(code(parser::fn_block_begin))]
+    FnBlockBegin {
+        #[source_code]
+        src: String,
+        #[label("this function is missing a `{{` to start its body")]
+        span: SourceSpan,
+    },
+    #[error("expected right brace `}}` to end function block")]
+    #[diagnostic(code(parser::fn_block_end))]
+    FnBlockEnd {
+        #[source_code]
+        src: String,
+        #[label("this function is missing a `}}` to end its body")]
+        span: SourceSpan,
+    },
+    #[error("invalid identifier following `let` keyword")]
+    #[diagnostic(code(parser::var_identifier))]
+    VarIdentifier {
+        #[source_code]
+        src: String,
+        #[label("invalid identifier here")]
+        span: SourceSpan,
+    },
+    #[error("expected assignment operator `=` following identifier in variable declaration")]
+    #[diagnostic(code(parser::var_assignment))]
+    VarAssignment {
+        #[source_code]
+        src: String,
+        #[label("expected `=` following this identifier")]
+        span: SourceSpan,
+    },
+    #[error("expected left brace `{{` following loop statement")]
+    #[diagnostic(code(parser::loop_block_begin))]
+    LoopBlockBegin {
+        #[source_code]
+        src: String,
+        #[label("this loop is missing a `{{` to start its body")]
+        span: SourceSpan,
+    },
+    #[error("expected right brace `}}` to end loop block")]
+    #[diagnostic(code(parser::loop_block_end))]
+    LoopBlockEnd {
+        #[source_code]
+        src: String,
+        #[label("this loop is missing a `}}` to end its body")]
+        span: SourceSpan,
+    },
+    #[error("token `{kind:?}` is unsupported")]
+    #[diagnostic(code(parser::unsupported_token))]
+    Unsupported {
+        kind: TokenKind,
+        #[source_code]
+        src: String,
+        #[label("unsupported token")]
+        span: SourceSpan,
+    },
+}
+
+impl ParserError {
+    pub fn to_report(self) -> String {
+        let report: miette::ErrReport = self.into();
+        format!("{report:?}")
+    }
 }
 
 enum Process {
@@ -48,40 +141,38 @@ enum Process {
 }
 
 pub struct Parser {
-    line: u32,
     tokens: VecDeque<Token>,
+    source: String,
 }
 
 impl Default for Parser {
     fn default() -> Self {
-        Self::new()
+        Self::new(String::new())
     }
 }
 
 impl Parser {
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(source: String) -> Self {
         Self {
-            line: 1,
             tokens: vec![].into(),
+            source,
         }
     }
 
-    #[must_use]
-    pub fn line(&self) -> u32 {
-        self.line
-    }
-
-    pub fn produce_ast(&mut self, source: String) -> Result<Stmt, Box<dyn std::error::Error>> {
+    pub fn produce_ast(&mut self) -> Result<Stmt, ParserError> {
         // Retrieve tokens from the lexer
-        let mut lexer = Lexer::new(source);
+        let mut lexer = Lexer::new(self.source.to_string());
 
-        let tokens = lexer.tokenize()?;
+        let Ok(tokens) = lexer.tokenize() else {
+            // TODO: No panic
+            panic!("lexer err");
+        };
         self.tokens = tokens.into();
 
         // Build out the program body
         let body = self.process(|token| match token {
-            Token::EndOfLine => Process::Consume,
+            TokenKind::EndOfLine => Process::Consume,
             _ => Process::Push,
         })?;
 
@@ -92,12 +183,12 @@ impl Parser {
 
     fn process<F>(&mut self, mut p: F) -> Result<Vec<Stmt>, ParserError>
     where
-        F: FnMut(&Token) -> Process,
+        F: FnMut(&TokenKind) -> Process,
     {
         let mut body = vec![];
 
         while let Some(token) = &self.tokens.front() {
-            match p(token) {
+            match p(&token.kind) {
                 Process::Break => break,
                 Process::Consume => {
                     self.consume();
@@ -115,24 +206,23 @@ impl Parser {
         self.tokens.front()
     }
 
-    fn consume(&mut self) -> Token {
-        let token = self.tokens.pop_front().expect("tokens should not be empty");
-
-        // If the last token is an `EndOfLine` token, don't increase the line counter since if a
-        // [`ParserError`] occurs there, lines will be miscounted
-        if token == Token::EndOfLine && !self.tokens.is_empty() {
-            self.line += 1;
+    fn peek_kind(&self) -> Option<&TokenKind> {
+        match self.peek() {
+            Some(token) => Some(&token.kind),
+            None => None,
         }
-
-        token
     }
 
-    fn expect(&mut self, token: &Token, error: ParserError) -> Result<(), ParserError> {
+    fn consume(&mut self) -> Token {
+        self.tokens.pop_front().expect("tokens should not be empty")
+    }
+
+    fn expect(&mut self, kind: &TokenKind, error: ParserError) -> Result<(), ParserError> {
         if self.tokens.is_empty() {
             return Err(error);
         }
 
-        if &self.consume() != token {
+        if &self.consume().kind != kind {
             return Err(error);
         }
 
@@ -144,11 +234,11 @@ impl Parser {
             unreachable!();
         };
 
-        let stmt = match token {
-            Token::Let => Stmt::Var(self.parse_var()?),
-            Token::Cond => Stmt::Cond(self.parse_cond()?),
-            Token::Func => Stmt::Func(self.parse_func()?),
-            Token::Loop => Stmt::Loop(self.parse_loop()?),
+        let stmt = match token.kind {
+            TokenKind::Let => Stmt::Var(self.parse_var()?),
+            TokenKind::Cond => Stmt::Cond(self.parse_cond()?),
+            TokenKind::Func => Stmt::Func(self.parse_func()?),
+            TokenKind::Loop => Stmt::Loop(self.parse_loop()?),
             _ => Stmt::Expr(self.parse_expr()?),
         };
 
@@ -157,17 +247,29 @@ impl Parser {
 
     fn parse_loop(&mut self) -> Result<Loop, ParserError> {
         // Consume the `loop` keyword
-        self.consume();
+        let token = self.consume();
 
-        self.expect(&Token::LeftBrace, ParserError::FnBlockBegin)?;
+        self.expect(
+            &TokenKind::LeftBrace,
+            ParserError::LoopBlockBegin {
+                src: self.source.clone(),
+                span: token.span,
+            },
+        )?;
 
         let body = self.process(|token| match token {
-            Token::RightBrace => Process::Break,
-            Token::EndOfLine => Process::Consume,
+            TokenKind::RightBrace => Process::Break,
+            TokenKind::EndOfLine => Process::Consume,
             _ => Process::Push,
         })?;
 
-        self.expect(&Token::RightBrace, ParserError::FnBlockEnd)?;
+        self.expect(
+            &TokenKind::RightBrace,
+            ParserError::LoopBlockEnd {
+                src: self.source.clone(),
+                span: token.span,
+            },
+        )?;
 
         Ok(Loop { body })
     }
@@ -176,34 +278,70 @@ impl Parser {
         // Consume the `fn` keyword
         self.consume();
 
-        let Token::Ident(ident) = self.consume() else {
-            return Err(ParserError::FnIdentifier);
+        let ident_token = self.consume();
+
+        let TokenKind::Ident(ident) = ident_token.kind else {
+            return Err(ParserError::FnIdentifier {
+                src: self.source.clone(),
+                span: ident_token.span,
+            });
         };
 
-        self.expect(&Token::LeftParen, ParserError::FnArgsBegin)?;
+        self.expect(
+            &TokenKind::LeftParen,
+            ParserError::FnArgsBegin {
+                src: self.source.clone(),
+                span: ident_token.span,
+            },
+        )?;
 
-        let params: Result<Vec<Ident>, ()> = self
-            .parse_args()?
+        let (args, len) = self.parse_args()?;
+
+        let params: Result<Vec<Ident>, ()> = args
             .into_iter()
-            .map(|expr| match expr {
-                Expr::Ident(ident) => Ok(ident),
+            .map(|expr| match expr.kind {
+                ExprKind::Ident(ident) => Ok(ident),
                 _ => Err(()),
             })
             .collect();
 
         let Ok(params) = params else {
-            return Err(ParserError::FnArgs);
+            let span = (ident_token.span.offset(), ident_token.span.len() + len);
+            return Err(ParserError::FnArgs {
+                src: self.source.clone(),
+                span: span.into(),
+            });
         };
 
-        self.expect(&Token::LeftBrace, ParserError::FnBlockBegin)?;
+        self.expect(
+            &TokenKind::RightParen,
+            ParserError::FnArgsEnd {
+                src: self.source.clone(),
+                span: ident_token.span,
+            },
+        )?;
+
+        self.expect(
+            &TokenKind::LeftBrace,
+            ParserError::FnBlockBegin {
+                src: self.source.clone(),
+                span: ident_token.span,
+            },
+        )?;
 
         let body = self.process(|token| match token {
-            Token::RightBrace => Process::Break,
-            Token::EndOfLine => Process::Consume,
+            TokenKind::RightBrace => Process::Break,
+            TokenKind::EndOfLine => Process::Consume,
             _ => Process::Push,
         })?;
 
-        self.expect(&Token::RightBrace, ParserError::FnBlockEnd)?;
+        self.expect(
+            &TokenKind::RightBrace,
+            ParserError::FnBlockEnd {
+                src: self.source.clone(),
+                span: ident_token.span,
+            },
+        )?;
 
         let func = Func {
             ident,
@@ -214,27 +352,30 @@ impl Parser {
         Ok(func)
     }
 
-    fn parse_args(&mut self) -> Result<Vec<Expr>, ParserError> {
+    fn parse_args(&mut self) -> Result<(Vec<Expr>, usize), ParserError> {
         let mut args = Vec::new();
+        let mut len = 0;
 
-        if self.peek() == Some(&Token::RightParen) {
+        if self.peek_kind() == Some(&TokenKind::RightParen) {
             self.consume();
-            return Ok(args);
+            return Ok((args, 0));
         }
 
         // First argument won't be preceded by a separator
-        args.push(self.parse_assignment_expr()?);
+        let arg = self.parse_assignment_expr()?;
+        len += arg.span.len();
+        args.push(arg);
 
         // Get all separated arguments
-        while self.peek() == Some(&Token::Separator) {
+        while self.peek_kind() == Some(&TokenKind::Separator) {
             self.consume();
             // TODO: Better error handling for no more tokens
-            args.push(self.parse_assignment_expr()?);
+            let arg = self.parse_assignment_expr()?;
+            len += arg.span.len();
+            args.push(arg);
         }
 
-        self.expect(&Token::RightParen, ParserError::FnArgsEnd)?;
-
-        Ok(args)
+        Ok((args, len))
     }
 
     fn parse_cond(&mut self) -> Result<Cond, ParserError> {
@@ -243,15 +384,27 @@ impl Parser {
 
         let condition = self.parse_expr()?;
 
-        self.expect(&Token::LeftBrace, ParserError::FnBlockBegin)?;
+        self.expect(
+            &TokenKind::LeftBrace,
+            ParserError::CondBlockBegin {
+                src: self.source.clone(),
+                span: condition.span,
+            },
+        )?;
 
         let body = self.process(|token| match token {
-            Token::RightBrace => Process::Break,
-            Token::EndOfLine => Process::Consume,
+            TokenKind::RightBrace => Process::Break,
+            TokenKind::EndOfLine => Process::Consume,
             _ => Process::Push,
         })?;
 
-        self.expect(&Token::RightBrace, ParserError::FnBlockEnd)?;
+        self.expect(
+            &TokenKind::RightBrace,
+            ParserError::CondBlockEnd {
+                src: self.source.clone(),
+                span: condition.span,
+            },
+        )?;
 
         let cond = Cond { condition, body };
 
@@ -262,18 +415,27 @@ impl Parser {
         // Consume the `let` keyword
         self.consume();
 
-        let Token::Ident(ident) = self.consume() else {
-            return Err(ParserError::VarIdentifier);
+        let ident_token = self.consume();
+
+        let TokenKind::Ident(ident) = ident_token.kind else {
+            return Err(ParserError::VarIdentifier {
+                src: self.source.clone(),
+                span: ident_token.span,
+            });
         };
 
-        self.expect(&Token::Assignment, ParserError::VarAssign)?;
+        self.expect(
+            &TokenKind::Assignment,
+            ParserError::VarAssignment {
+                src: self.source.clone(),
+                span: ident_token.span,
+            },
+        )?;
 
         let var = Var {
             ident,
             value: Box::new(self.parse_expr()?.into()),
         };
-
-        self.expect(&Token::EndOfLine, ParserError::VarEndOfLine)?;
 
         Ok(var)
     }
@@ -285,15 +447,22 @@ impl Parser {
     fn parse_assignment_expr(&mut self) -> Result<Expr, ParserError> {
         let mut left = self.parse_comparison_expr()?;
 
-        if self.peek() == Some(&Token::Assignment) {
+        if self.peek_kind() == Some(&TokenKind::Assignment) {
             self.consume();
 
-            let value = self.parse_assignment_expr()?;
+            let right = self.parse_assignment_expr()?;
+            let span = (
+                left.span.offset(),
+                (right.span.offset() - left.span.offset()) + right.span.len(),
+            );
 
-            left = Expr::Assignment {
-                assignee: Box::new(left),
-                value: Box::new(value),
-            };
+            left = Expr {
+                kind: ExprKind::Assignment {
+                    assignee: Box::new(left),
+                    value: Box::new(right),
+                },
+                span: span.into(),
+            }
         }
 
         Ok(left)
@@ -302,19 +471,25 @@ impl Parser {
     fn parse_comparison_expr(&mut self) -> Result<Expr, ParserError> {
         let mut left = self.parse_additive_expr()?;
 
-        let Some(&Token::CmpOp(op)) = self.peek() else {
-            return Ok(left);
-        };
+        if let Some(&TokenKind::CmpOp(op)) = self.peek_kind() {
+            // Consume the operator
+            self.consume();
 
-        // Consume the operator
-        self.consume();
+            let right = self.parse_additive_expr()?;
+            let span = (
+                left.span.offset(),
+                (right.span.offset() - left.span.offset()) + right.span.len(),
+            );
 
-        let right = self.parse_additive_expr()?;
-        left = Expr::CmpOp {
-            left: Box::new(left),
-            right: Box::new(right),
-            op,
-        };
+            left = Expr {
+                kind: ExprKind::CmpOp {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                    op,
+                },
+                span: span.into(),
+            }
+        }
 
         Ok(left)
     }
@@ -322,10 +497,10 @@ impl Parser {
     fn parse_additive_expr(&mut self) -> Result<Expr, ParserError> {
         let mut left = self.parse_multiplicative_expr()?;
 
-        while let Some(token) = self.peek() {
-            let op = match token {
-                Token::Plus => BinaryOp::Add,
-                Token::Minus => BinaryOp::Sub,
+        while let Some(kind) = self.peek_kind() {
+            let op = match kind {
+                TokenKind::Plus => BinaryOp::Add,
+                TokenKind::Minus => BinaryOp::Sub,
                 _ => break,
             };
 
@@ -333,10 +508,18 @@ impl Parser {
             self.consume();
 
             let right = self.parse_multiplicative_expr()?;
-            left = Expr::BinaryOp {
-                left: Box::new(left),
-                right: Box::new(right),
-                op,
+            let span = (
+                left.span.offset(),
+                (right.span.offset() - left.span.offset()) + right.span.len(),
+            );
+
+            left = Expr {
+                kind: ExprKind::BinaryOp {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                    op,
+                },
+                span: span.into(),
             }
         }
 
@@ -346,21 +529,29 @@ impl Parser {
     fn parse_multiplicative_expr(&mut self) -> Result<Expr, ParserError> {
         let mut left = self.parse_unary_expr()?;
 
-        while let Some(token) = self.peek() {
-            let op = match token {
-                Token::Star => BinaryOp::Mul,
-                Token::Slash => BinaryOp::Div,
+        while let Some(kind) = self.peek_kind() {
+            let op = match kind {
+                TokenKind::Star => BinaryOp::Mul,
+                TokenKind::Slash => BinaryOp::Div,
                 _ => break,
             };
 
             // Consume the operator
             self.consume();
 
-            let right = self.parse_unary_expr()?;
-            left = Expr::BinaryOp {
-                left: Box::new(left),
-                right: Box::new(right),
-                op,
+            let right = self.parse_multiplicative_expr()?;
+            let span = (
+                left.span.offset(),
+                (right.span.offset() - left.span.offset()) + right.span.len(),
+            );
+
+            left = Expr {
+                kind: ExprKind::BinaryOp {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                    op,
+                },
+                span: span.into(),
             }
         }
 
@@ -368,18 +559,30 @@ impl Parser {
     }
 
     fn parse_unary_expr(&mut self) -> Result<Expr, ParserError> {
-        match self.peek() {
-            Some(&Token::Plus | &Token::Minus | &Token::Bang) => {
-                let op = match self.consume() {
-                    Token::Plus => UnaryOp::Pos,
-                    Token::Minus => UnaryOp::Neg,
-                    Token::Bang => UnaryOp::Not,
+        match self.peek_kind() {
+            Some(&TokenKind::Plus | &TokenKind::Minus | &TokenKind::Bang) => {
+                let token = self.consume();
+
+                let op = match token.kind {
+                    TokenKind::Plus => UnaryOp::Pos,
+                    TokenKind::Minus => UnaryOp::Neg,
+                    TokenKind::Bang => UnaryOp::Not,
                     _ => unreachable!(),
                 };
-                Ok(Expr::UnaryOp {
-                    // We should keep parsing as many unary operators as we can
-                    expr: Box::new(self.parse_unary_expr()?),
-                    op,
+
+                let right = self.parse_unary_expr()?;
+                let span = (
+                    token.span.offset(),
+                    right.span.offset() - token.span.offset() + right.span.len(),
+                );
+
+                Ok(Expr {
+                    kind: ExprKind::UnaryOp {
+                        // We should keep parsing as many unary operators as we can
+                        expr: Box::new(self.parse_unary_expr()?),
+                        op,
+                    },
+                    span: span.into(),
                 })
             }
             _ => self.parse_call_expr(),
@@ -389,13 +592,28 @@ impl Parser {
     fn parse_call_expr(&mut self) -> Result<Expr, ParserError> {
         let mut left = self.parse_primary_expr()?;
 
-        if self.peek() == Some(&Token::LeftParen) {
-            self.consume();
+        if self.peek_kind() == Some(&TokenKind::LeftParen) {
+            let token = self.consume();
 
-            left = Expr::Call {
-                caller: Box::new(left),
-                args: self.parse_args()?,
-            };
+            let (args, len) = self.parse_args()?;
+
+            self.expect(
+                &TokenKind::RightParen,
+                ParserError::FnArgsEnd {
+                    src: self.source.clone(),
+                    span: left.span,
+                },
+            )?;
+
+            let span = (left.span.offset(), left.span.len() + token.span.len() + len);
+
+            left = Expr {
+                kind: ExprKind::Call {
+                    caller: Box::new(left),
+                    args,
+                },
+                span: span.into(),
+            }
         }
 
         Ok(left)
@@ -404,38 +622,69 @@ impl Parser {
     fn parse_primary_expr(&mut self) -> Result<Expr, ParserError> {
         let token = self.consume();
 
-        let expr = match token {
-            Token::Ident(value) => Expr::Ident(value),
-            Token::Bool(value) => {
+        let expr = match token.kind {
+            TokenKind::Ident(value) => Expr {
+                kind: ExprKind::Ident(value),
+                span: token.span,
+            },
+            TokenKind::Bool(value) => {
                 let value = match value.as_ref() {
                     "true" => true,
                     "false" => false,
                     _ => unreachable!("`Bool` token should have value `true` or `false`"),
                 };
-                Expr::Bool(value)
+                Expr {
+                    kind: ExprKind::Bool(value),
+                    span: token.span,
+                }
             }
-            Token::Int(value) => Expr::Int(
-                value
-                    .parse::<i32>()
-                    .expect("`Int` token should be parsed as an `i32`"),
-            ),
-            Token::Str(value) => Expr::Str(value),
-            Token::LeftParen => {
+            TokenKind::Int(value) => Expr {
+                kind: ExprKind::Int(
+                    value
+                        .parse::<i32>()
+                        .expect("`Int` token should be parsed as an `i32`"),
+                ),
+                span: token.span,
+            },
+            TokenKind::Str(value) => Expr {
+                kind: ExprKind::Str(value),
+                span: token.span,
+            },
+            TokenKind::LeftParen => {
                 let expr = self.parse_expr()?;
                 // Consume closing parenthesis
                 self.consume();
                 expr
             }
-            Token::Return => {
-                let value = match self.peek() {
-                    Some(Token::EndOfLine) => None,
-                    _ => Some(Box::new(self.parse_expr()?)),
+            TokenKind::Return => {
+                let (value, len) = if let Some(TokenKind::EndOfLine) = self.peek_kind() {
+                    (None, 0)
+                } else {
+                    let expr = self.parse_expr()?;
+                    let len = expr.span.len();
+                    (Some(Box::new(expr)), len)
                 };
-                Expr::Return { value }
+                let span = (token.span.offset(), len + token.span.len());
+                Expr {
+                    kind: ExprKind::Return { value },
+                    span: span.into(),
+                }
             }
-            Token::Continue => Expr::Continue,
-            Token::Break => Expr::Break,
-            _ => return Err(ParserError::Unsupported(token)),
+            TokenKind::Continue => Expr {
+                kind: ExprKind::Continue,
+                span: token.span,
+            },
+            TokenKind::Break => Expr {
+                kind: ExprKind::Break,
+                span: token.span,
+            },
+            _ => {
+                return Err(ParserError::Unsupported {
+                    kind: token.kind,
+                    src: self.source.clone(),
+                    span: token.span,
+                })
+            }
         };
 
         Ok(expr)

@@ -45,19 +45,19 @@ fn main() {
     );
 
     let result = |contents: String| {
-        let mut parser = Parser::new();
-        let program = match parser.produce_ast(contents) {
+        let mut parser = Parser::new(contents);
+        let program = match parser.produce_ast() {
             Ok(program) => program,
-            Err(reason) => panic!("[L{}] {reason}", parser.line()),
+            Err(reason) => {
+                panic!("{}", reason.to_report());
+            }
         };
         eval(program, &env)
     };
 
     if let Some(path) = args.path {
         let contents = read_to_string(path).expect("Could not read file from specified path");
-        if let Err(reason) = result(contents) {
-            println!("{reason}");
-        }
+        let _ = result(contents);
     } else {
         loop {
             print!(">: ");

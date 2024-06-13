@@ -1,3 +1,4 @@
+use miette::SourceSpan;
 use thiserror::Error;
 
 use crate::util::is_alpha;
@@ -5,7 +6,7 @@ use crate::util::is_alpha;
 #[derive(Error, Debug)]
 pub enum LexerError {
     #[error("token `{0}` is invalid")]
-    InvalidToken(char),
+    InvalidTokenKind(char),
     #[error("str was never terminated")]
     UnterminatedString,
     #[error("invalid escape sequence `{0}`")]
@@ -23,7 +24,13 @@ pub enum CmpOp {
 }
 
 #[derive(PartialEq, Debug)]
-pub enum Token {
+pub struct Token {
+    pub kind: TokenKind,
+    pub span: SourceSpan,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum TokenKind {
     // Literals
     Bool(String),
     Ident(String),
@@ -86,7 +93,7 @@ impl Lexer {
 
         loop {
             let token = self.next()?;
-            if token == Token::EndOfFile {
+            if token.kind == TokenKind::EndOfFile {
                 break;
             }
             tokens.push(token);
@@ -199,79 +206,84 @@ impl Lexer {
     fn next(&mut self) -> Result<Token, LexerError> {
         self.consume_whitespace();
 
-        let token = match self.ch {
-            '\0' => Token::EndOfFile,
-            '+' => Token::Plus,
-            '-' => Token::Minus,
-            '*' => Token::Star,
+        // Record the start position.
+        let start = self.cursor;
+
+        let kind = match self.ch {
+            '\0' => TokenKind::EndOfFile,
+            '+' => TokenKind::Plus,
+            '-' => TokenKind::Minus,
+            '*' => TokenKind::Star,
             '/' => match self.peek_char() {
                 '/' => {
                     self.read_comment();
                     return self.next();
                 }
-                _ => Token::Slash,
+                _ => TokenKind::Slash,
             },
             '=' => match self.peek_char() {
                 '=' => {
                     self.read_char();
-                    Token::CmpOp(CmpOp::Eq)
+                    TokenKind::CmpOp(CmpOp::Eq)
                 }
-                _ => Token::Assignment,
+                _ => TokenKind::Assignment,
             },
             '!' => match self.peek_char() {
                 '=' => {
                     self.read_char();
-                    Token::CmpOp(CmpOp::NotEq)
+                    TokenKind::CmpOp(CmpOp::NotEq)
                 }
-                _ => Token::Bang,
+                _ => TokenKind::Bang,
             },
             '<' => match self.peek_char() {
                 '=' => {
                     self.read_char();
-                    Token::CmpOp(CmpOp::LessEq)
+                    TokenKind::CmpOp(CmpOp::LessEq)
                 }
-                _ => Token::CmpOp(CmpOp::Less),
+                _ => TokenKind::CmpOp(CmpOp::Less),
             },
             '>' => match self.peek_char() {
                 '=' => {
                     self.read_char();
-                    Token::CmpOp(CmpOp::GreaterEq)
+                    TokenKind::CmpOp(CmpOp::GreaterEq)
                 }
-                _ => Token::CmpOp(CmpOp::Greater),
+                _ => TokenKind::CmpOp(CmpOp::Greater),
             },
-            ',' => Token::Separator,
-            '(' => Token::LeftParen,
-            ')' => Token::RightParen,
-            '{' => Token::LeftBrace,
-            '}' => Token::RightBrace,
-            '\n' => Token::EndOfLine,
-            '"' => Token::Str(self.read_str()?),
+            ',' => TokenKind::Separator,
+            '(' => TokenKind::LeftParen,
+            ')' => TokenKind::RightParen,
+            '{' => TokenKind::LeftBrace,
+            '}' => TokenKind::RightBrace,
+            '\n' => TokenKind::EndOfLine,
+            '"' => TokenKind::Str(self.read_str()?),
             _ => {
                 if is_alpha(self.ch) {
                     let ident = self.read_ident();
 
                     match ident.as_str() {
                         // Keywords
-                        "let" => Token::Let,
-                        "if" => Token::Cond,
-                        "fn" => Token::Func,
-                        "return" => Token::Return,
-                        "loop" => Token::Loop,
-                        "continue" => Token::Continue,
-                        "break" => Token::Break,
+                        "let" => TokenKind::Let,
+                        "if" => TokenKind::Cond,
+                        "fn" => TokenKind::Func,
+                        "return" => TokenKind::Return,
+                        "loop" => TokenKind::Loop,
+                        "continue" => TokenKind::Continue,
+                        "break" => TokenKind::Break,
                         // Misc
-                        "true" | "false" => Token::Bool(ident),
-                        _ => Token::Ident(ident),
+                        "true" | "false" => TokenKind::Bool(ident),
+                        _ => TokenKind::Ident(ident),
                     }
                 } else if self.ch.is_ascii_digit() {
-                    Token::Int(self.read_number())
+                    TokenKind::Int(self.read_number())
                 } else {
-                    return Err(LexerError::InvalidToken(self.ch));
+                    return Err(LexerError::InvalidTokenKind(self.ch));
                 }
             }
         };
 
         self.read_char();
+        let span = SourceSpan::new((start - 1).into(), self.cursor - start);
+        let token = Token { kind, span };
         Ok(token)
     }
 }
@@ -295,7 +307,7 @@ mod tests {
         let mut lexer = Lexer::new("\n");
         assert_eq!(
             lexer.tokenize().unwrap(),
-            vec![Token::EndOfLine],
+            vec![TokenKind::EndOfLine],
             r"'\n' should produce a new line token"
         )
     }
@@ -306,7 +318,7 @@ mod tests {
         let mut lexer = Lexer::new(alphabet);
         assert_eq!(
             lexer.tokenize().unwrap(),
-            vec![Token::Ident(alphabet.to_string())],
+            vec![TokenKind::Ident(alphabet.to_string())],
             "All alphabetical characters should be detected"
         )
     }
@@ -317,7 +329,7 @@ mod tests {
         let mut lexer = Lexer::new(digits);
         assert_eq!(
             lexer.tokenize().unwrap(),
-            vec![Token::Int(digits.to_string())],
+            vec![TokenKind::Int(digits.to_string())],
             "All numerical characters should be detected"
         )
     }
@@ -328,17 +340,17 @@ mod tests {
 cba (43 21)";
         let mut lexer = Lexer::new(source);
         let tokens = vec![
-            Token::LeftParen,
-            Token::Int("12".to_string()),
-            Token::Int("34".to_string()),
-            Token::RightParen,
-            Token::Ident("abc".to_string()),
-            Token::EndOfLine,
-            Token::Ident("cba".to_string()),
-            Token::LeftParen,
-            Token::Int("43".to_string()),
-            Token::Int("21".to_string()),
-            Token::RightParen,
+            TokenKind::LeftParen,
+            TokenKind::Int("12".to_string()),
+            TokenKind::Int("34".to_string()),
+            TokenKind::RightParen,
+            TokenKind::Ident("abc".to_string()),
+            TokenKind::EndOfLine,
+            TokenKind::Ident("cba".to_string()),
+            TokenKind::LeftParen,
+            TokenKind::Int("43".to_string()),
+            TokenKind::Int("21".to_string()),
+            TokenKind::RightParen,
         ];
         assert_eq!(lexer.tokenize().unwrap(), tokens);
     }

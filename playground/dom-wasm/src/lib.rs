@@ -5,7 +5,21 @@ use wasm_bindgen::prelude::*;
 use web_sys::console;
 
 #[wasm_bindgen]
-pub fn interpret(contents: &str) -> String {
+pub fn set_hook() {
+    // This is important since in wasm builds, unicode will be disabled by default.
+    let _ = miette::set_hook(Box::new(|_| {
+        Box::new(
+            miette::MietteHandlerOpts::new()
+                .terminal_links(false)
+                .unicode(true)
+                .color(true)
+                .build(),
+        )
+    }));
+}
+
+#[wasm_bindgen]
+pub fn interpret(source: &str) -> String {
     let env = Env::new();
 
     env.borrow_mut()
@@ -22,15 +36,16 @@ pub fn interpret(contents: &str) -> String {
         )
         .expect("should be able to declare `print` function");
 
-    let mut parser = Parser::new();
-    match parser.produce_ast(contents.to_string()) {
+    let mut parser = Parser::new(source.to_string());
+
+    match parser.produce_ast() {
         Ok(program) => {
             let ast = format!("{:#?}", program);
             let _ = eval(program, &env);
             return ast;
         }
         Err(reason) => {
-            console::log_1(&format!("[L{}] {reason}", parser.line()).into());
+            console::log_1(&reason.to_report().into());
             return "AST could not be produced".to_string();
         }
     };

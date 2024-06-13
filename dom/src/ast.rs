@@ -1,3 +1,5 @@
+use miette::SourceSpan;
+
 use crate::lexer::CmpOp;
 
 /// An identifier (e.g. a variable name).
@@ -78,9 +80,15 @@ pub enum UnaryOp {
     Not,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Expr {
+    pub kind: ExprKind,
+    pub span: SourceSpan,
+}
+
 /// An expression in the abstract syntax tree.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expr {
+pub enum ExprKind {
     /// An assignment expression.
     Assignment {
         /// The assignee (left-hand side) of the assignment.

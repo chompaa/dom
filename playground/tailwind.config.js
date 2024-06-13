@@ -3,7 +3,7 @@ export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     fontFamily: {
-      primary: "Iosevka Web",
+      primary: "Iosevka",
     },
     extend: {},
   },

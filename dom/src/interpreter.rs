@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use thiserror::Error;
 
 use crate::{
-    ast::{BinaryOp, Cond, Expr, Func, Ident, Loop, Stmt, UnaryOp, Var},
+    ast::{BinaryOp, Cond, Expr, ExprKind, Func, Ident, Loop, Stmt, UnaryOp, Var},
     environment::{Env, Val},
     lexer::CmpOp,
     util::Result,
@@ -51,19 +51,19 @@ pub fn eval(statement: impl Into<Stmt>, env: &Rc<RefCell<Env>>) -> Result<Val> {
         }) => eval_func(&ident, params, body, env),
         Stmt::Loop(Loop { body }) => eval_loop(&body, env),
         Stmt::Var(Var { ident, value }) => eval_var(ident, *value, env),
-        Stmt::Expr(expr) => match expr {
-            Expr::Assignment { assignee, value } => eval_assign(*assignee, *value, env),
-            Expr::Call { caller, args } => eval_call(*caller, args, env),
-            Expr::CmpOp { left, right, op } => eval_cmp_expr(*left, *right, op, env),
-            Expr::UnaryOp { expr, op } => eval_unary_expr(*expr, op, env),
-            Expr::BinaryOp { left, right, op } => eval_binary_expr(*left, *right, op, env),
-            Expr::Ident(ident) => eval_ident(&ident, env),
-            Expr::Bool(value) => Ok(Val::Bool(value)),
-            Expr::Int(number) => Ok(Val::Int(number)),
-            Expr::Str(value) => Ok(Val::Str(value)),
-            Expr::Return { value } => Err(Box::new(Exception::Return(value))),
-            Expr::Continue => Err(Box::new(Exception::Continue)),
-            Expr::Break => Err(Box::new(Exception::Break)),
+        Stmt::Expr(expr) => match expr.kind {
+            ExprKind::Assignment { assignee, value } => eval_assign(*assignee, *value, env),
+            ExprKind::Call { caller, args } => eval_call(*caller, args, env),
+            ExprKind::CmpOp { left, right, op } => eval_cmp_expr(*left, *right, op, env),
+            ExprKind::UnaryOp { expr, op } => eval_unary_expr(*expr, op, env),
+            ExprKind::BinaryOp { left, right, op } => eval_binary_expr(*left, *right, op, env),
+            ExprKind::Ident(ident) => eval_ident(&ident, env),
+            ExprKind::Bool(value) => Ok(Val::Bool(value)),
+            ExprKind::Int(number) => Ok(Val::Int(number)),
+            ExprKind::Str(value) => Ok(Val::Str(value)),
+            ExprKind::Return { value } => Err(Box::new(Exception::Return(value))),
+            ExprKind::Continue => Err(Box::new(Exception::Continue)),
+            ExprKind::Break => Err(Box::new(Exception::Break)),
         },
     }
 }
@@ -142,7 +142,7 @@ fn eval_var(ident: Ident, value: Stmt, env: &Rc<RefCell<Env>>) -> Result<Val> {
 }
 
 fn eval_assign(assignee: Expr, value: Expr, env: &Rc<RefCell<Env>>) -> Result<Val> {
-    let Expr::Ident(assignee) = assignee else {
+    let ExprKind::Ident(assignee) = assignee.kind else {
         return Err(Box::new(InterpreterError::Assignment));
     };
 
