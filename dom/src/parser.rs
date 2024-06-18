@@ -2,7 +2,9 @@
 //!
 //! Order of precedence (low to high):
 //! - Assignments
-//! - Comparison Operators
+//! - Logical OR
+//! - Logical AND
+//! - Operators
 //! - Binary Addition
 //! - Binary Multiplication
 //! - Unary Operators
@@ -15,7 +17,7 @@ use std::i32;
 use miette::{Diagnostic, Result, SourceSpan};
 use thiserror::Error;
 
-use crate::ast::{BinaryOp, Cond, Expr, ExprKind, Func, Ident, Loop, Stmt, UnaryOp, Var};
+use crate::ast::{BinaryOp, Cond, Expr, ExprKind, Func, Ident, LogicOp, Loop, Stmt, UnaryOp, Var};
 use crate::lexer::{Lexer, Token, TokenKind};
 
 #[derive(Error, Diagnostic, Debug)]
@@ -359,12 +361,12 @@ impl Parser {
     }
 
     fn parse_assignment_expr(&mut self) -> Result<Expr> {
-        let mut left = self.parse_comparison_expr()?;
+        let mut left = self.parse_logical_or_expr()?;
 
         if self.peek_kind() == Some(&TokenKind::Assignment) {
             self.consume();
 
-            let right = self.parse_assignment_expr()?;
+            let right = self.parse_logical_or_expr()?;
             let span = (
                 left.span.offset(),
                 (right.span.offset() - left.span.offset()) + right.span.len(),
@@ -382,10 +384,62 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_comparison_expr(&mut self) -> Result<Expr> {
+    fn parse_logical_or_expr(&mut self) -> Result<Expr> {
+        let mut left = self.parse_logical_and_expr()?;
+
+        while let Some(&TokenKind::Or) = self.peek_kind() {
+            // Consume the operator
+            self.consume();
+
+            let right = self.parse_logical_and_expr()?;
+            let span = (
+                left.span.offset(),
+                (right.span.offset() - left.span.offset()) + right.span.len(),
+            );
+
+            left = Expr {
+                kind: ExprKind::LogicOp {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                    op: LogicOp::Or,
+                },
+                span: span.into(),
+            }
+        }
+
+        Ok(left)
+    }
+
+    fn parse_logical_and_expr(&mut self) -> Result<Expr> {
+        let mut left = self.parse_rel_expr()?;
+
+        while let Some(&TokenKind::And) = self.peek_kind() {
+            // Consume the operator
+            self.consume();
+
+            let right = self.parse_rel_expr()?;
+            let span = (
+                left.span.offset(),
+                (right.span.offset() - left.span.offset()) + right.span.len(),
+            );
+
+            left = Expr {
+                kind: ExprKind::LogicOp {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                    op: LogicOp::And,
+                },
+                span: span.into(),
+            }
+        }
+
+        Ok(left)
+    }
+
+    fn parse_rel_expr(&mut self) -> Result<Expr> {
         let mut left = self.parse_additive_expr()?;
 
-        if let Some(&TokenKind::CmpOp(op)) = self.peek_kind() {
+        if let Some(&TokenKind::RelOp(op)) = self.peek_kind() {
             // Consume the operator
             self.consume();
 
@@ -396,7 +450,7 @@ impl Parser {
             );
 
             left = Expr {
-                kind: ExprKind::CmpOp {
+                kind: ExprKind::RelOp {
                     left: Box::new(left),
                     right: Box::new(right),
                     op,

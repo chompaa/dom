@@ -14,7 +14,7 @@ pub enum LexerError {
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
-pub enum CmpOp {
+pub enum RelOp {
     Eq,
     NotEq,
     Less,
@@ -47,12 +47,14 @@ pub enum TokenKind {
     Break,
 
     // Operators
+    And,
+    Or,
     Plus,
     Minus,
     Star,
     Slash,
     Bang,
-    CmpOp(CmpOp),
+    RelOp(RelOp),
     Assignment,
     Separator,
 
@@ -211,6 +213,20 @@ impl Lexer {
 
         let kind = match self.ch {
             '\0' => TokenKind::EndOfFile,
+            '&' => match self.peek_char() {
+                '&' => {
+                    self.read_char();
+                    TokenKind::And
+                }
+                _ => return Err(LexerError::InvalidTokenKind(self.ch).into()),
+            },
+            '|' => match self.peek_char() {
+                '|' => {
+                    self.read_char();
+                    TokenKind::Or
+                }
+                _ => return Err(LexerError::InvalidTokenKind(self.ch).into()),
+            },
             '+' => TokenKind::Plus,
             '-' => TokenKind::Minus,
             '*' => TokenKind::Star,
@@ -224,30 +240,30 @@ impl Lexer {
             '=' => match self.peek_char() {
                 '=' => {
                     self.read_char();
-                    TokenKind::CmpOp(CmpOp::Eq)
+                    TokenKind::RelOp(RelOp::Eq)
                 }
                 _ => TokenKind::Assignment,
             },
             '!' => match self.peek_char() {
                 '=' => {
                     self.read_char();
-                    TokenKind::CmpOp(CmpOp::NotEq)
+                    TokenKind::RelOp(RelOp::NotEq)
                 }
                 _ => TokenKind::Bang,
             },
             '<' => match self.peek_char() {
                 '=' => {
                     self.read_char();
-                    TokenKind::CmpOp(CmpOp::LessEq)
+                    TokenKind::RelOp(RelOp::LessEq)
                 }
-                _ => TokenKind::CmpOp(CmpOp::Less),
+                _ => TokenKind::RelOp(RelOp::Less),
             },
             '>' => match self.peek_char() {
                 '=' => {
                     self.read_char();
-                    TokenKind::CmpOp(CmpOp::GreaterEq)
+                    TokenKind::RelOp(RelOp::GreaterEq)
                 }
-                _ => TokenKind::CmpOp(CmpOp::Greater),
+                _ => TokenKind::RelOp(RelOp::Greater),
             },
             ',' => TokenKind::Separator,
             '(' => TokenKind::LeftParen,

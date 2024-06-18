@@ -4,9 +4,9 @@ use miette::{Diagnostic, Result, SourceSpan};
 use thiserror::Error;
 
 use crate::{
-    ast::{BinaryOp, Cond, Expr, ExprKind, Func, Ident, Loop, Stmt, UnaryOp, Var},
+    ast::{BinaryOp, Cond, Expr, ExprKind, Func, Ident, LogicOp, Loop, Stmt, UnaryOp, Var},
     environment::{Env, Val},
-    lexer::CmpOp,
+    lexer::RelOp,
 };
 
 #[derive(Error, Diagnostic, Debug)]
@@ -34,14 +34,23 @@ pub enum InterpreterError {
         right: ExprKind,
         op: BinaryOp,
     },
-    #[error("comparison operation `{op:?}` unsupported for types `{left}` and `{right}`")]
-    #[diagnostic(code(interpreter::comparison_expression_unsupported))]
-    ComparisonExpressionUnsupported {
+    #[error("logical operation `{op:?}` unsupported for types `{left}` and `{right}`")]
+    #[diagnostic(code(interpreter::logical_expression_unsupported))]
+    LogicalExpressionUnsupported {
         #[label("this operation is unsupported")]
         span: SourceSpan,
         left: ExprKind,
         right: ExprKind,
-        op: CmpOp,
+        op: LogicOp,
+    },
+    #[error("relational operation `{op:?}` unsupported for types `{left}` and `{right}`")]
+    #[diagnostic(code(interpreter::relational_expression_unsupported))]
+    RelationalExpressionUnsupported {
+        #[label("this operation is unsupported")]
+        span: SourceSpan,
+        left: ExprKind,
+        right: ExprKind,
+        op: RelOp,
     },
     #[error("caller is not a defined function")]
     #[diagnostic(code(interpreter::caller_not_defined))]
@@ -96,8 +105,11 @@ impl Interpreter {
                         self.eval_assign(*assignee, *value, env)
                     }
                     ExprKind::Call { caller, args } => self.eval_call(*caller, args, env, span),
-                    ExprKind::CmpOp { left, right, op } => {
-                        self.eval_cmp_expr(*left, *right, op, span, env)
+                    ExprKind::LogicOp { left, right, op } => {
+                        self.eval_logic_expr(*left, *right, op, span, env)
+                    }
+                    ExprKind::RelOp { left, right, op } => {
+                        self.eval_rel_expr(*left, *right, op, span, env)
                     }
                     ExprKind::UnaryOp { expr, op } => self.eval_unary_expr(*expr, op, span, env),
                     ExprKind::BinaryOp { left, right, op } => {
@@ -263,18 +275,47 @@ impl Interpreter {
         }
     }
 
-    fn eval_cmp_expr(
+    fn eval_logic_expr(
         &self,
         left: Expr,
         right: Expr,
-        op: CmpOp,
+        op: LogicOp,
         span: SourceSpan,
         env: &Arc<Mutex<Env>>,
     ) -> Result<Val> {
         let lhs = self.eval(left.clone(), env)?;
         let rhs = self.eval(right.clone(), env)?;
 
-        let err = InterpreterError::ComparisonExpressionUnsupported {
+        let (Val::Bool(lhs), Val::Bool(rhs)) = (lhs, rhs) else {
+            return Err(InterpreterError::LogicalExpressionUnsupported {
+                span,
+                left: left.kind,
+                right: right.kind,
+                op,
+            }
+            .into());
+        };
+
+        let result = match op {
+            LogicOp::And => lhs && rhs,
+            LogicOp::Or => lhs || rhs,
+        };
+
+        Ok(Val::Bool(result))
+    }
+
+    fn eval_rel_expr(
+        &self,
+        left: Expr,
+        right: Expr,
+        op: RelOp,
+        span: SourceSpan,
+        env: &Arc<Mutex<Env>>,
+    ) -> Result<Val> {
+        let lhs = self.eval(left.clone(), env)?;
+        let rhs = self.eval(right.clone(), env)?;
+
+        let err = InterpreterError::RelationalExpressionUnsupported {
             span,
             left: left.kind,
             right: right.kind,
@@ -283,21 +324,21 @@ impl Interpreter {
 
         let result = match (&lhs, &rhs) {
             (Val::Bool(lhs), Val::Bool(rhs)) => match op {
-                CmpOp::Eq => lhs == rhs,
-                CmpOp::NotEq => lhs != rhs,
+                RelOp::Eq => lhs == rhs,
+                RelOp::NotEq => lhs != rhs,
                 _ => return Err(err.into()),
             },
             (Val::Int(lhs), Val::Int(rhs)) => match op {
-                CmpOp::Eq => lhs == rhs,
-                CmpOp::NotEq => lhs != rhs,
-                CmpOp::Greater => lhs > rhs,
-                CmpOp::GreaterEq => lhs >= rhs,
-                CmpOp::Less => lhs < rhs,
-                CmpOp::LessEq => lhs <= rhs,
+                RelOp::Eq => lhs == rhs,
+                RelOp::NotEq => lhs != rhs,
+                RelOp::Greater => lhs > rhs,
+                RelOp::GreaterEq => lhs >= rhs,
+                RelOp::Less => lhs < rhs,
+                RelOp::LessEq => lhs <= rhs,
             },
             (Val::Str(lhs), Val::Str(rhs)) => match op {
-                CmpOp::Eq => lhs == rhs,
-                CmpOp::NotEq => lhs != rhs,
+                RelOp::Eq => lhs == rhs,
+                RelOp::NotEq => lhs != rhs,
                 _ => return Err(err.into()),
             },
             _ => return Err(err.into()),

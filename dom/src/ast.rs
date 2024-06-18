@@ -2,7 +2,7 @@ use std::fmt;
 
 use miette::SourceSpan;
 
-use crate::lexer::CmpOp;
+use crate::lexer::RelOp;
 
 /// An identifier (e.g. a variable name).
 pub type Ident = String;
@@ -75,6 +75,13 @@ pub struct Var {
     pub span: SourceSpan,
 }
 
+/// Logical operators.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LogicOp {
+    And,
+    Or,
+}
+
 /// Binary operators.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinaryOp {
@@ -121,14 +128,14 @@ pub enum ExprKind {
     Bool(bool),
     /// An integer literal expression.
     Int(i32),
-    /// A comparison operation expression.
-    CmpOp {
+    /// A relational operation expression.
+    RelOp {
         /// The left operand of the comparison operation.
         left: Box<Expr>,
         /// The right operand of the comparison operation.
         right: Box<Expr>,
         /// The comparison operation itself.
-        op: CmpOp,
+        op: RelOp,
     },
     /// A unary operation expression.
     UnaryOp {
@@ -145,6 +152,15 @@ pub enum ExprKind {
         right: Box<Expr>,
         /// The binary operation itself.
         op: BinaryOp,
+    },
+    /// A logical operation expression.
+    LogicOp {
+        /// The left operand of the logic operation.
+        left: Box<Expr>,
+        /// The right operand of the logic operation.
+        right: Box<Expr>,
+        /// The logic operation itself.
+        op: LogicOp,
     },
     /// A return expression for functions.
     Return {
@@ -166,7 +182,8 @@ impl fmt::Display for ExprKind {
             ExprKind::Ident { .. } => write!(f, "Ident"),
             ExprKind::Bool { .. } => write!(f, "Bool"),
             ExprKind::Int { .. } => write!(f, "Int"),
-            ExprKind::CmpOp { .. } => write!(f, "CmpOp"),
+            ExprKind::LogicOp { .. } => write!(f, "LogicOp"),
+            ExprKind::RelOp { .. } => write!(f, "RelOp"),
             ExprKind::UnaryOp { .. } => write!(f, "UnaryOp"),
             ExprKind::BinaryOp { .. } => write!(f, "BinaryOp"),
             ExprKind::Return { .. } => write!(f, "Return"),
