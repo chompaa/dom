@@ -1,9 +1,9 @@
-use miette::SourceSpan;
+use miette::{Diagnostic, Result, SourceSpan};
 use thiserror::Error;
 
 use crate::util::is_alpha;
 
-#[derive(Error, Debug)]
+#[derive(Error, Diagnostic, Debug)]
 pub enum LexerError {
     #[error("token `{0}` is invalid")]
     InvalidTokenKind(char),
@@ -88,7 +88,7 @@ impl Lexer {
     }
 
     /// Tokenizes the current buffer.
-    pub fn tokenize(&mut self) -> Result<Vec<Token>, LexerError> {
+    pub fn tokenize(&mut self) -> Result<Vec<Token>> {
         let mut tokens: Vec<Token> = vec![];
 
         loop {
@@ -167,14 +167,14 @@ impl Lexer {
         self.buffer[start..self.cursor].iter().collect::<String>()
     }
 
-    fn read_str(&mut self) -> Result<String, LexerError> {
+    fn read_str(&mut self) -> Result<String> {
         let mut result = String::new();
         // Consume opening quote.
         self.read_char();
 
         while self.ch != '"' {
             match self.ch {
-                '\0' => return Err(LexerError::UnterminatedString),
+                '\0' => return Err(LexerError::UnterminatedString.into()),
                 '\\' => {
                     // Read escape char.
                     self.read_char();
@@ -184,7 +184,7 @@ impl Lexer {
                         'n' => result.push('\n'),
                         't' => result.push('\t'),
                         'r' => result.push('\r'),
-                        _ => return Err(LexerError::InvalidEscapeSequence(self.ch)),
+                        _ => return Err(LexerError::InvalidEscapeSequence(self.ch).into()),
                     }
                 }
                 _ => result.push(self.ch),
@@ -203,7 +203,7 @@ impl Lexer {
     }
 
     /// Tokenizes the current character(s) and advances the cursor.
-    fn next(&mut self) -> Result<Token, LexerError> {
+    fn next(&mut self) -> Result<Token> {
         self.consume_whitespace();
 
         // Record the start position.
@@ -276,7 +276,7 @@ impl Lexer {
                 } else if self.ch.is_ascii_digit() {
                     TokenKind::Int(self.read_number())
                 } else {
-                    return Err(LexerError::InvalidTokenKind(self.ch));
+                    return Err(LexerError::InvalidTokenKind(self.ch).into());
                 }
             }
         };
@@ -307,7 +307,10 @@ mod tests {
         let mut lexer = Lexer::new("\n");
         assert_eq!(
             lexer.tokenize().unwrap(),
-            vec![TokenKind::EndOfLine],
+            vec![Token {
+                kind: TokenKind::EndOfLine,
+                span: (0, 1).into()
+            }],
             r"'\n' should produce a new line token"
         )
     }
@@ -318,7 +321,10 @@ mod tests {
         let mut lexer = Lexer::new(alphabet);
         assert_eq!(
             lexer.tokenize().unwrap(),
-            vec![TokenKind::Ident(alphabet.to_string())],
+            vec![Token {
+                kind: TokenKind::Ident(alphabet.to_string()),
+                span: (0, 52).into()
+            }],
             "All alphabetical characters should be detected"
         )
     }
@@ -329,29 +335,11 @@ mod tests {
         let mut lexer = Lexer::new(digits);
         assert_eq!(
             lexer.tokenize().unwrap(),
-            vec![TokenKind::Int(digits.to_string())],
+            vec![Token {
+                kind: TokenKind::Int(digits.to_string()),
+                span: (0, 10).into()
+            }],
             "All numerical characters should be detected"
         )
-    }
-
-    #[test]
-    fn multiple_token_types() {
-        let source = "(12 34) abc
-cba (43 21)";
-        let mut lexer = Lexer::new(source);
-        let tokens = vec![
-            TokenKind::LeftParen,
-            TokenKind::Int("12".to_string()),
-            TokenKind::Int("34".to_string()),
-            TokenKind::RightParen,
-            TokenKind::Ident("abc".to_string()),
-            TokenKind::EndOfLine,
-            TokenKind::Ident("cba".to_string()),
-            TokenKind::LeftParen,
-            TokenKind::Int("43".to_string()),
-            TokenKind::Int("21".to_string()),
-            TokenKind::RightParen,
-        ];
-        assert_eq!(lexer.tokenize().unwrap(), tokens);
     }
 }

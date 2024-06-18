@@ -1,35 +1,63 @@
-use std::{cell::RefCell, rc::Rc};
+use std::sync::{Arc, Mutex};
 
+use miette::{Diagnostic, Result, SourceSpan};
 use thiserror::Error;
 
 use crate::{
     ast::{BinaryOp, Cond, Expr, ExprKind, Func, Ident, Loop, Stmt, UnaryOp, Var},
     environment::{Env, Val},
     lexer::CmpOp,
-    util::Result,
 };
 
-#[derive(Error, Debug)]
+#[derive(Error, Diagnostic, Debug)]
 pub enum InterpreterError {
-    #[error("missing identifier in assignment")]
-    Assignment,
-    #[error("unary expression unsupported")]
-    Unary,
-    #[error("binary expression unsupported")]
-    Binary,
-    #[error("there are no supported comparison operations for `{0:?}` and `{1:?}`")]
-    Cmp(Val, Val),
-    #[error("only `==` and `!=` is supported for bools")]
-    CmpBool,
-    #[error("only `==` and `!=` is supported for str")]
-    CmpStr,
-    #[error("could not interpret arguments")]
-    Args,
+    #[error("assignment does not contain valid identifier")]
+    #[diagnostic(code(interpreter::invalid_assignment_identifier))]
+    InvalidAssignmentIdentifier {
+        #[label("this identifier is invalid")]
+        span: SourceSpan,
+    },
+    #[error("unary operator `{op:?}` unsupported for type `{kind}`")]
+    #[diagnostic(code(interpreter::unary_expression_unsupported))]
+    UnaryExpressionUnsupported {
+        #[label("this operation is unsupported")]
+        span: SourceSpan,
+        kind: ExprKind,
+        op: UnaryOp,
+    },
+    #[error("binary operation `{op:?}` unsupported for types `{left}` and `{right}`")]
+    #[diagnostic(code(interpreter::binary_expression_unsupported))]
+    BinaryExpressionUnsupported {
+        #[label("this operation is unsupported")]
+        span: SourceSpan,
+        left: ExprKind,
+        right: ExprKind,
+        op: BinaryOp,
+    },
+    #[error("comparison operation `{op:?}` unsupported for types `{left}` and `{right}`")]
+    #[diagnostic(code(interpreter::comparison_expression_unsupported))]
+    ComparisonExpressionUnsupported {
+        #[label("this operation is unsupported")]
+        span: SourceSpan,
+        left: ExprKind,
+        right: ExprKind,
+        op: CmpOp,
+    },
     #[error("caller is not a defined function")]
-    Caller,
+    #[diagnostic(code(interpreter::caller_not_defined))]
+    InvalidCaller {
+        #[label("this is not a function")]
+        span: SourceSpan,
+    },
+    #[error("caller arguments do not match function arguments")]
+    #[diagnostic(code(interpreter::mismatched_args))]
+    MismatchedArgs {
+        #[label("this call has incorrect argument count")]
+        span: SourceSpan,
+    },
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Diagnostic, Debug)]
 pub enum Exception {
     #[error("cannot break out of non-loop")]
     Break,
@@ -39,261 +67,340 @@ pub enum Exception {
     Return(Option<Box<Expr>>),
 }
 
-pub fn eval(statement: impl Into<Stmt>, env: &Rc<RefCell<Env>>) -> Result<Val> {
-    match statement.into() {
-        Stmt::Program { body } => eval_body(body, env),
-        Stmt::Cond(cond) => eval_cond(cond, env),
-        Stmt::Func(Func {
-            ident,
-            params,
-            body,
-            ..
-        }) => eval_func(&ident, params, body, env),
-        Stmt::Loop(Loop { body }) => eval_loop(&body, env),
-        Stmt::Var(Var { ident, value }) => eval_var(ident, *value, env),
-        Stmt::Expr(expr) => match expr.kind {
-            ExprKind::Assignment { assignee, value } => eval_assign(*assignee, *value, env),
-            ExprKind::Call { caller, args } => eval_call(*caller, args, env),
-            ExprKind::CmpOp { left, right, op } => eval_cmp_expr(*left, *right, op, env),
-            ExprKind::UnaryOp { expr, op } => eval_unary_expr(*expr, op, env),
-            ExprKind::BinaryOp { left, right, op } => eval_binary_expr(*left, *right, op, env),
-            ExprKind::Ident(ident) => eval_ident(&ident, env),
-            ExprKind::Bool(value) => Ok(Val::Bool(value)),
-            ExprKind::Int(number) => Ok(Val::Int(number)),
-            ExprKind::Str(value) => Ok(Val::Str(value)),
-            ExprKind::Return { value } => Err(Box::new(Exception::Return(value))),
-            ExprKind::Continue => Err(Box::new(Exception::Continue)),
-            ExprKind::Break => Err(Box::new(Exception::Break)),
-        },
-    }
-}
+pub struct Interpreter;
 
-fn eval_body(body: Vec<Stmt>, env: &Rc<RefCell<Env>>) -> Result<Val> {
-    body.into_iter()
-        .map(|stmt| eval(stmt, env))
-        .last()
-        .unwrap_or(Ok(Val::None))
-}
-
-fn eval_cond(cond: Cond, env: &Rc<RefCell<Env>>) -> Result<Val> {
-    let Cond { condition, body } = cond;
-
-    let Val::Bool(success) = eval(condition, env)? else {
-        unreachable!("`Val::Bool` should be returned from condition evaluation");
-    };
-
-    if success {
-        let env = Env::with_parent(Rc::clone(env));
-        let result = eval_body(body, &env)?;
-        return Ok(result);
+impl Interpreter {
+    pub fn new() -> Self {
+        Self
     }
 
-    Ok(Val::None)
-}
-
-fn eval_func(
-    ident: &Ident,
-    params: Vec<Ident>,
-    body: Vec<Stmt>,
-    env: &Rc<RefCell<Env>>,
-) -> Result<Val> {
-    let func = Val::Func {
-        ident: ident.to_owned(),
-        params,
-        body,
-        env: Env::with_parent(Rc::clone(env)),
-    };
-
-    let result = env.borrow_mut().declare(ident.to_owned(), func);
-
-    Ok(result?)
-}
-
-fn eval_loop(body: &Vec<Stmt>, env: &Rc<RefCell<Env>>) -> Result<Val> {
-    let mut last = None;
-
-    'outer: loop {
-        let loop_env = Env::with_parent(Rc::clone(env));
-
-        for stmt in body {
-            let result = eval(stmt.clone(), &loop_env);
-
-            match result {
-                Ok(result) => last = Some(result),
-                Err(kind) => match kind.downcast_ref() {
-                    Some(Exception::Continue) => continue 'outer,
-                    Some(Exception::Break) => break 'outer,
-                    _ => return Err(kind),
-                },
+    pub fn eval(&self, statement: impl Into<Stmt>, env: &Arc<Mutex<Env>>) -> Result<Val> {
+        match statement.into() {
+            Stmt::Program { body } => self.eval_body(body, env),
+            Stmt::Cond(Cond {
+                condition, body, ..
+            }) => self.eval_cond(condition, body, env),
+            Stmt::Func(Func {
+                ident,
+                params,
+                body,
+                span,
+                ..
+            }) => self.eval_func(&ident, params, body, env, span),
+            Stmt::Loop(Loop { body, .. }) => self.eval_loop(&body, env),
+            Stmt::Var(Var { ident, value, span }) => self.eval_var(ident, *value, env, span),
+            Stmt::Expr(expr) => {
+                let Expr { kind, span } = expr;
+                match kind {
+                    ExprKind::Assignment { assignee, value } => {
+                        self.eval_assign(*assignee, *value, env)
+                    }
+                    ExprKind::Call { caller, args } => self.eval_call(*caller, args, env, span),
+                    ExprKind::CmpOp { left, right, op } => {
+                        self.eval_cmp_expr(*left, *right, op, span, env)
+                    }
+                    ExprKind::UnaryOp { expr, op } => self.eval_unary_expr(*expr, op, span, env),
+                    ExprKind::BinaryOp { left, right, op } => {
+                        self.eval_binary_expr(*left, *right, op, span, env)
+                    }
+                    ExprKind::Ident(ident) => self.eval_ident(&ident, env, span),
+                    ExprKind::Bool(value) => Ok(Val::Bool(value)),
+                    ExprKind::Int(number) => Ok(Val::Int(number)),
+                    ExprKind::Str(value) => Ok(Val::Str(value)),
+                    ExprKind::Return { value } => Err(Exception::Return(value).into()),
+                    ExprKind::Continue => Err(Exception::Continue.into()),
+                    ExprKind::Break => Err(Exception::Break.into()),
+                }
             }
         }
     }
 
-    match last {
-        Some(val) => Ok(val),
-        None => Ok(Val::None),
+    fn eval_body(&self, body: Vec<Stmt>, env: &Arc<Mutex<Env>>) -> Result<Val> {
+        body.into_iter()
+            .map(|stmt| self.eval(stmt, env))
+            .last()
+            .unwrap_or(Ok(Val::None))
     }
-}
 
-fn eval_var(ident: Ident, value: Stmt, env: &Rc<RefCell<Env>>) -> Result<Val> {
-    let value = eval(value, env)?;
-    let result = env.borrow_mut().declare(ident, value)?;
-    Ok(result)
-}
+    fn eval_cond(&self, condition: Expr, body: Vec<Stmt>, env: &Arc<Mutex<Env>>) -> Result<Val> {
+        let Val::Bool(success) = self.eval(condition, env)? else {
+            unreachable!("`Val::Bool` should be returned from condition evaluation");
+        };
 
-fn eval_assign(assignee: Expr, value: Expr, env: &Rc<RefCell<Env>>) -> Result<Val> {
-    let ExprKind::Ident(assignee) = assignee.kind else {
-        return Err(Box::new(InterpreterError::Assignment));
-    };
+        if success {
+            let env = Env::with_parent(Arc::clone(env));
+            let result = self.eval_body(body, &env)?;
+            return Ok(result);
+        }
 
-    let value = eval(value, env)?;
-    let result = Env::assign(env, assignee, value)?;
-    Ok(result)
-}
+        Ok(Val::None)
+    }
 
-fn eval_call(caller: Expr, args: Vec<Expr>, env: &Rc<RefCell<Env>>) -> Result<Val> {
-    let Ok(args): Result<Vec<Val>> = args.into_iter().map(|arg| eval(arg, env)).collect() else {
-        return Err(Box::new(InterpreterError::Args));
-    };
+    fn eval_func(
+        &self,
+        ident: &Ident,
+        params: Vec<Ident>,
+        body: Vec<Stmt>,
+        env: &Arc<Mutex<Env>>,
+        span: SourceSpan,
+    ) -> Result<Val> {
+        let func = Val::Func {
+            ident: ident.to_owned(),
+            params,
+            body,
+            env: Env::with_parent(Arc::clone(env)),
+        };
 
-    match eval(caller, env)? {
-        Val::NativeFunc(mut native_func) => match native_func(args, Rc::clone(env)) {
-            Some(result) => Ok(result),
-            None => Ok(Val::None),
-        },
-        Val::Func {
-            params, body, env, ..
-        } => {
-            for (param, arg) in params.into_iter().zip(args.into_iter()) {
-                env.borrow_mut().declare(param, arg)?;
-            }
+        env.lock().unwrap().declare(ident.to_owned(), func, span)
+    }
 
-            let mut last = None;
+    fn eval_loop(&self, body: &Vec<Stmt>, env: &Arc<Mutex<Env>>) -> Result<Val> {
+        let mut last = None;
+
+        'outer: loop {
+            let loop_env = Env::with_parent(Arc::clone(env));
 
             for stmt in body {
-                let result = eval(stmt, &env);
+                let result = self.eval(stmt.clone(), &loop_env);
 
                 match result {
                     Ok(result) => last = Some(result),
                     Err(kind) => match kind.downcast_ref() {
-                        Some(Exception::Return(value)) => {
-                            last = match value {
-                                Some(value) => Some(eval(*value.clone(), &env)?),
-                                None => None,
-                            };
-                            break;
-                        }
+                        Some(Exception::Continue) => continue 'outer,
+                        Some(Exception::Break) => break 'outer,
                         _ => return Err(kind),
                     },
                 }
             }
+        }
 
-            match last {
-                Some(val) => Ok(val),
+        match last {
+            Some(val) => Ok(val),
+            None => Ok(Val::None),
+        }
+    }
+
+    fn eval_var(
+        &self,
+        ident: Ident,
+        value: Stmt,
+        env: &Arc<Mutex<Env>>,
+        span: SourceSpan,
+    ) -> Result<Val> {
+        let value = self.eval(value, env)?;
+        let result = env.lock().unwrap().declare(ident, value, span)?;
+        Ok(result)
+    }
+
+    fn eval_assign(&self, assignee: Expr, value: Expr, env: &Arc<Mutex<Env>>) -> Result<Val> {
+        let span = assignee.span;
+
+        let ExprKind::Ident(assignee) = assignee.kind else {
+            return Err(InterpreterError::InvalidAssignmentIdentifier { span }.into());
+        };
+
+        let value = self.eval(value, env)?;
+        let result = Env::assign(env, assignee, value, span)?;
+        Ok(result)
+    }
+
+    fn eval_call(
+        &self,
+        caller: Expr,
+        args: Vec<Expr>,
+        env: &Arc<Mutex<Env>>,
+        span: SourceSpan,
+    ) -> Result<Val> {
+        let args = args
+            .into_iter()
+            .map(|arg| self.eval(arg, env))
+            .collect::<Result<Vec<Val>>>()?;
+
+        let caller_span = caller.span;
+
+        match self.eval(caller, env)? {
+            Val::NativeFunc(mut native_func) => match native_func(args, Arc::clone(env)) {
+                Some(result) => Ok(result),
                 None => Ok(Val::None),
+            },
+            Val::Func {
+                params, body, env, ..
+            } => {
+                if args.len() != params.len() {
+                    return Err(InterpreterError::MismatchedArgs { span }.into());
+                }
+
+                for (param, arg) in params.into_iter().zip(args.into_iter()) {
+                    env.lock().unwrap().declare(param, arg, span)?;
+                }
+
+                let mut last = None;
+
+                for stmt in body {
+                    let result = self.eval(stmt, &env);
+
+                    match result {
+                        Ok(result) => last = Some(result),
+                        Err(kind) => match kind.downcast_ref() {
+                            Some(Exception::Return(value)) => {
+                                last = match value {
+                                    Some(value) => Some(self.eval(*value.clone(), &env)?),
+                                    None => None,
+                                };
+                                break;
+                            }
+                            _ => return Err(kind),
+                        },
+                    }
+                }
+
+                match last {
+                    Some(val) => Ok(val),
+                    None => Ok(Val::None),
+                }
             }
+            _ => Err(InterpreterError::InvalidCaller { span: caller_span }.into()),
         }
-        _ => Err(Box::new(InterpreterError::Caller)),
     }
-}
 
-fn eval_cmp_expr(left: Expr, right: Expr, op: CmpOp, env: &Rc<RefCell<Env>>) -> Result<Val> {
-    let lhs = eval(left, env)?;
-    let rhs = eval(right, env)?;
+    fn eval_cmp_expr(
+        &self,
+        left: Expr,
+        right: Expr,
+        op: CmpOp,
+        span: SourceSpan,
+        env: &Arc<Mutex<Env>>,
+    ) -> Result<Val> {
+        let lhs = self.eval(left.clone(), env)?;
+        let rhs = self.eval(right.clone(), env)?;
 
-    let result = match (&lhs, &rhs) {
-        (Val::Bool(lhs), Val::Bool(rhs)) => match op {
-            CmpOp::Eq => lhs == rhs,
-            CmpOp::NotEq => lhs != rhs,
-            _ => return Err(Box::new(InterpreterError::CmpBool)),
-        },
-        (Val::Int(lhs), Val::Int(rhs)) => match op {
-            CmpOp::Eq => lhs == rhs,
-            CmpOp::NotEq => lhs != rhs,
-            CmpOp::Greater => lhs > rhs,
-            CmpOp::GreaterEq => lhs >= rhs,
-            CmpOp::Less => lhs < rhs,
-            CmpOp::LessEq => lhs <= rhs,
-        },
-        (Val::Str(lhs), Val::Str(rhs)) => match op {
-            CmpOp::Eq => lhs == rhs,
-            CmpOp::NotEq => lhs != rhs,
-            _ => return Err(Box::new(InterpreterError::CmpStr)),
-        },
-        _ => return Err(Box::new(InterpreterError::Cmp(lhs, rhs))),
-    };
+        let err = InterpreterError::ComparisonExpressionUnsupported {
+            span,
+            left: left.kind,
+            right: right.kind,
+            op,
+        };
 
-    Ok(Val::Bool(result))
-}
+        let result = match (&lhs, &rhs) {
+            (Val::Bool(lhs), Val::Bool(rhs)) => match op {
+                CmpOp::Eq => lhs == rhs,
+                CmpOp::NotEq => lhs != rhs,
+                _ => return Err(err.into()),
+            },
+            (Val::Int(lhs), Val::Int(rhs)) => match op {
+                CmpOp::Eq => lhs == rhs,
+                CmpOp::NotEq => lhs != rhs,
+                CmpOp::Greater => lhs > rhs,
+                CmpOp::GreaterEq => lhs >= rhs,
+                CmpOp::Less => lhs < rhs,
+                CmpOp::LessEq => lhs <= rhs,
+            },
+            (Val::Str(lhs), Val::Str(rhs)) => match op {
+                CmpOp::Eq => lhs == rhs,
+                CmpOp::NotEq => lhs != rhs,
+                _ => return Err(err.into()),
+            },
+            _ => return Err(err.into()),
+        };
 
-fn eval_unary_expr(expr: Expr, op: UnaryOp, env: &Rc<RefCell<Env>>) -> Result<Val> {
-    let result = eval(expr, env)?;
-
-    match result {
-        Val::Int(value) => match op {
-            UnaryOp::Pos => Ok(result),
-            UnaryOp::Neg => Ok(Val::Int(-value)),
-            _ => Err(Box::new(InterpreterError::Unary)),
-        },
-        Val::Bool(value) => match op {
-            UnaryOp::Not => Ok(Val::Bool(!value)),
-            _ => Err(Box::new(InterpreterError::Unary)),
-        },
-        _ => Err(Box::new(InterpreterError::Unary)),
+        Ok(Val::Bool(result))
     }
-}
 
-fn eval_binary_expr(left: Expr, right: Expr, op: BinaryOp, env: &Rc<RefCell<Env>>) -> Result<Val> {
-    let lhs = eval(left, env)?;
-    let rhs = eval(right, env)?;
+    fn eval_unary_expr(
+        &self,
+        expr: Expr,
+        op: UnaryOp,
+        span: SourceSpan,
+        env: &Arc<Mutex<Env>>,
+    ) -> Result<Val> {
+        let result = self.eval(expr.clone(), env)?;
 
-    let result: Val = match (lhs, rhs) {
-        // Integer operations
-        (Val::Int(lhs), Val::Int(rhs)) => {
-            let value = match op {
-                BinaryOp::Add => lhs + rhs,
-                BinaryOp::Sub => lhs - rhs,
-                BinaryOp::Mul => lhs * rhs,
-                BinaryOp::Div => lhs / rhs,
-            };
-            Val::Int(value)
+        let err = InterpreterError::UnaryExpressionUnsupported {
+            span,
+            kind: expr.kind,
+            op,
+        };
+
+        match result {
+            Val::Int(value) => match op {
+                UnaryOp::Pos => Ok(result),
+                UnaryOp::Neg => Ok(Val::Int(-value)),
+                _ => Err(err.into()),
+            },
+            Val::Bool(value) => match op {
+                UnaryOp::Not => Ok(Val::Bool(!value)),
+                _ => Err(err.into()),
+            },
+            _ => Err(err.into()),
         }
-        // String addition.
-        //
-        // Example: "foo" + "bar" -> "foobar"
-        (Val::Str(lhs), Val::Str(rhs)) => {
-            if op == BinaryOp::Add {
-                Val::Str(format!("{lhs}{rhs}"))
-            } else {
-                return Err(Box::new(InterpreterError::Binary));
+    }
+
+    fn eval_binary_expr(
+        &self,
+        left: Expr,
+        right: Expr,
+        op: BinaryOp,
+        span: SourceSpan,
+        env: &Arc<Mutex<Env>>,
+    ) -> Result<Val> {
+        let lhs = self.eval(left.clone(), env)?;
+        let rhs = self.eval(right.clone(), env)?;
+
+        let err = InterpreterError::BinaryExpressionUnsupported {
+            span,
+            left: left.kind,
+            right: right.kind,
+            op,
+        };
+
+        let result: Val = match (lhs, rhs) {
+            // Integer operations
+            (Val::Int(lhs), Val::Int(rhs)) => {
+                let value = match op {
+                    BinaryOp::Add => lhs + rhs,
+                    BinaryOp::Sub => lhs - rhs,
+                    BinaryOp::Mul => lhs * rhs,
+                    BinaryOp::Div => lhs / rhs,
+                };
+                Val::Int(value)
             }
-        }
-        // String repeating. Integers less than one are not valid.
-        //
-        // Example: "foo" * 2 -> "foofoo".
-        (Val::Str(lhs), Val::Int(rhs)) => {
-            if op == BinaryOp::Mul && rhs >= 0 {
-                // Since `rhs` is positive, no need to worry about casting
-                Val::Str(lhs.repeat(rhs as usize))
-            } else {
-                return Err(Box::new(InterpreterError::Binary));
+            // String addition.
+            //
+            // Example: "foo" + "bar" -> "foobar"
+            (Val::Str(lhs), Val::Str(rhs)) => {
+                if op == BinaryOp::Add {
+                    Val::Str(format!("{lhs}{rhs}"))
+                } else {
+                    return Err(err.into());
+                }
             }
-        }
-        (Val::Int(lhs), Val::Str(rhs)) => {
-            if op == BinaryOp::Mul && lhs >= 0 {
-                // Since `lhs` is positive, no need to worry about casting
-                Val::Str(rhs.repeat(lhs as usize))
-            } else {
-                return Err(Box::new(InterpreterError::Binary));
+            // String repeating. Integers less than one are not valid.
+            //
+            // Example: "foo" * 2 -> "foofoo".
+            (Val::Str(lhs), Val::Int(rhs)) => {
+                if op == BinaryOp::Mul && rhs >= 0 {
+                    // Since `rhs` is positive, no need to worry about casting
+                    Val::Str(lhs.repeat(rhs as usize))
+                } else {
+                    return Err(err.into());
+                }
             }
-        }
-        _ => return Err(Box::new(InterpreterError::Binary)),
-    };
+            (Val::Int(lhs), Val::Str(rhs)) => {
+                if op == BinaryOp::Mul && lhs >= 0 {
+                    // Since `lhs` is positive, no need to worry about casting
+                    Val::Str(rhs.repeat(lhs as usize))
+                } else {
+                    return Err(err.into());
+                }
+            }
+            _ => return Err(err.into()),
+        };
 
-    Ok(result)
-}
+        Ok(result)
+    }
 
-fn eval_ident(ident: &Ident, env: &Rc<RefCell<Env>>) -> Result<Val> {
-    let val = Env::lookup(env, ident)?;
-    Ok(val)
+    fn eval_ident(&self, ident: &Ident, env: &Arc<Mutex<Env>>, span: SourceSpan) -> Result<Val> {
+        let val = Env::lookup(env, ident, span)?;
+        Ok(val)
+    }
 }

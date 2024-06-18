@@ -1,3 +1,5 @@
+use std::fmt;
+
 use miette::SourceSpan;
 
 use crate::lexer::CmpOp;
@@ -36,6 +38,8 @@ pub struct Cond {
     pub condition: Expr,
     /// The body of the conditional to be executed if the condition succeeds.
     pub body: Vec<Stmt>,
+    /// The span of the condition.
+    pub span: SourceSpan,
 }
 
 /// A function declaration.
@@ -47,6 +51,8 @@ pub struct Func {
     pub params: Vec<Ident>,
     /// The body of the function.
     pub body: Vec<Stmt>,
+    /// The span of the function identifier.
+    pub span: SourceSpan,
 }
 
 /// A loop statement.
@@ -54,6 +60,8 @@ pub struct Func {
 pub struct Loop {
     /// The value returned.
     pub body: Vec<Stmt>,
+    /// The span of the loop keyword.
+    pub span: SourceSpan,
 }
 
 /// A variable declaration.
@@ -63,8 +71,11 @@ pub struct Var {
     pub ident: Ident,
     /// The value of the variable.
     pub value: Box<Stmt>,
+    /// The span of the variable identifier.
+    pub span: SourceSpan,
 }
 
+/// Binary operators.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinaryOp {
     Add,
@@ -73,6 +84,7 @@ pub enum BinaryOp {
     Div,
 }
 
+/// Unary operators.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnaryOp {
     Pos,
@@ -80,13 +92,14 @@ pub enum UnaryOp {
     Not,
 }
 
+/// An expression in the abstract syntax tree.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expr {
     pub kind: ExprKind,
     pub span: SourceSpan,
 }
 
-/// An expression in the abstract syntax tree.
+/// The kind of expression.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
     /// An assignment expression.
@@ -142,4 +155,23 @@ pub enum ExprKind {
     Continue,
     /// A break expression for loops.
     Break,
+}
+
+impl fmt::Display for ExprKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExprKind::Assignment { .. } => write!(f, "Assignment"),
+            ExprKind::Call { .. } => write!(f, "Call"),
+            ExprKind::Str { .. } => write!(f, "Str"),
+            ExprKind::Ident { .. } => write!(f, "Ident"),
+            ExprKind::Bool { .. } => write!(f, "Bool"),
+            ExprKind::Int { .. } => write!(f, "Int"),
+            ExprKind::CmpOp { .. } => write!(f, "CmpOp"),
+            ExprKind::UnaryOp { .. } => write!(f, "UnaryOp"),
+            ExprKind::BinaryOp { .. } => write!(f, "BinaryOp"),
+            ExprKind::Return { .. } => write!(f, "Return"),
+            ExprKind::Continue => write!(f, "Continue"),
+            ExprKind::Break => write!(f, "Break"),
+        }
+    }
 }

@@ -1,30 +1,42 @@
 //! Environment for storing and looking up variables.
 
+use miette::{Diagnostic, Result, SourceSpan};
 use thiserror::Error;
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use crate::ast::{Ident, Stmt};
 
-#[derive(Error, Debug)]
+#[derive(Error, Diagnostic, Debug)]
 pub enum EnvError {
-    #[error("identifier `{0}` cannot be redeclared")]
-    Duplicate(String),
-    #[error("identifier `{0}` used without declaration")]
-    Declaration(String),
+    #[error("identifier cannot be redeclared")]
+    #[diagnostic(code(environment::identifier_already_exists))]
+    IdentifierAlreadyExists {
+        #[label("this identifier already exists")]
+        span: SourceSpan,
+    },
+    #[error("identifier not found")]
+    #[diagnostic(code(environment::identifier_not_found))]
+    IdentifierNotFound {
+        #[label("this identifier was never defined")]
+        span: SourceSpan,
+    },
 }
 
-pub trait CloneableFn: FnMut(Vec<Val>, Rc<RefCell<Env>>) -> Option<Val> {
-    fn clone_box<'a>(&self) -> Box<dyn 'a + CloneableFn>
+pub trait CloneableFn: FnMut(Vec<Val>, Arc<Mutex<Env>>) -> Option<Val> {
+    fn clone_box<'a>(&self) -> Box<dyn CloneableFn + Send + Sync + 'static>
     where
         Self: 'a;
 }
 
 impl<F> CloneableFn for F
 where
-    F: Fn(Vec<Val>, Rc<RefCell<Env>>) -> Option<Val> + Clone,
+    F: Fn(Vec<Val>, Arc<Mutex<Env>>) -> Option<Val> + Send + Sync + Clone + 'static,
 {
-    fn clone_box<'a>(&self) -> Box<dyn 'a + CloneableFn>
+    fn clone_box<'a>(&self) -> Box<dyn CloneableFn + Send + Sync + 'static>
     where
         Self: 'a,
     {
@@ -32,31 +44,38 @@ where
     }
 }
 
-impl<'a> Clone for Box<dyn 'a + CloneableFn> {
+impl<'a> Clone for Box<dyn CloneableFn + Send + Sync + 'static> {
     fn clone(&self) -> Self {
         (**self).clone_box()
     }
 }
 
-impl<'a> std::fmt::Debug for Box<dyn 'a + CloneableFn> {
+impl<'a> std::fmt::Debug for Box<dyn CloneableFn + Send + Sync + 'static> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "NativeFunc")
     }
 }
 
+/// Runtime values.
 #[derive(Debug, Clone)]
 pub enum Val {
+    /// Empty value.
     None,
+    /// Boolean value.
     Bool(bool),
+    /// Integer value.
     Int(i32),
+    /// String value.
     Str(String),
+    /// User-defined function.
     Func {
         ident: Ident,
         params: Vec<Ident>,
         body: Vec<Stmt>,
-        env: Rc<RefCell<Env>>,
+        env: Arc<Mutex<Env>>,
     },
-    NativeFunc(Box<dyn CloneableFn>),
+    /// Built-in function.
+    NativeFunc(Box<dyn CloneableFn + Send + Sync>),
 }
 
 impl std::fmt::Display for Val {
@@ -76,21 +95,22 @@ impl std::fmt::Display for Val {
 #[derive(Debug, Clone, Default)]
 pub struct Env {
     /// The parent environment, if any.
-    parent: Option<Rc<RefCell<Env>>>,
+    parent: Option<Arc<Mutex<Env>>>,
     /// The values stored in this environment.
     values: HashMap<String, Val>,
 }
 
 impl Env {
     #[must_use]
-    pub fn new() -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Self::default()))
+    /// Creates a new environment.
+    pub fn new() -> Arc<Mutex<Self>> {
+        Arc::new(Mutex::new(Self::default()))
     }
 
     /// Creates a new environment with the given parent environment.
     #[must_use]
-    pub fn with_parent(parent: Rc<RefCell<Env>>) -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Self {
+    pub fn with_parent(parent: Arc<Mutex<Env>>) -> Arc<Mutex<Self>> {
+        Arc::new(Mutex::new(Self {
             parent: Some(parent),
             values: HashMap::new(),
         }))
@@ -111,10 +131,10 @@ impl Env {
     /// Declares a new variable with the given name and value.
     ///
     /// Returns an error if a variable with the same name already exists in this environment.
-    pub fn declare(&mut self, name: String, value: Val) -> Result<Val, EnvError> {
+    pub fn declare(&mut self, name: String, value: Val, span: SourceSpan) -> Result<Val> {
         // Check if a variable with the same name already exists in this environment.
         if self.values.contains_key(&name) {
-            return Err(EnvError::Duplicate(name));
+            return Err(EnvError::IdentifierAlreadyExists { span }.into());
         }
 
         self.values.insert(name, value.clone());
@@ -122,14 +142,27 @@ impl Env {
         Ok(value)
     }
 
+    /// Declares a new variable with the given name and value, overwritting any variable that
+    /// might exist.
+    ///
+    /// Does not return anything.
+    pub fn declare_unchecked(&mut self, name: String, value: Val) {
+        self.values.insert(name, value.clone());
+    }
+
     /// Assigns a new value to the variable with the given name.
     ///
     /// Returns an error if no variable with the given name exists in this environment or its parents.
-    pub fn assign(env: &Rc<RefCell<Self>>, name: String, value: Val) -> Result<Val, EnvError> {
+    pub fn assign(
+        env: &Arc<Mutex<Self>>,
+        name: String,
+        value: Val,
+        span: SourceSpan,
+    ) -> Result<Val> {
         // Find the environment where the variable is declared.
-        let env = Self::resolve(env, &name)?;
+        let env = Self::resolve(env, &name, span)?;
 
-        env.borrow_mut().values.insert(name, value.clone());
+        env.lock().unwrap().values.insert(name, value.clone());
 
         Ok(value)
     }
@@ -137,26 +170,31 @@ impl Env {
     /// Looks up the value of the variable with the given name.
     ///
     /// Returns an error if no variable with the given name exists in this environment or its parents.
-    pub fn lookup(env: &Rc<RefCell<Self>>, name: &str) -> Result<Val, EnvError> {
+    pub fn lookup(env: &Arc<Mutex<Self>>, name: &str, span: SourceSpan) -> Result<Val> {
         // Find the environment where the variable is declared.
-        let env = Self::resolve(env, name)?;
-        let values = &env.borrow().values;
+        let env = Self::resolve(env, name, span)?;
+        let values = &env.lock().unwrap().values;
         let value = values
             .get(name)
-            .expect("Environment should contain identifier");
+            .expect("variable should have a value")
+            .clone();
 
-        Ok(value.clone())
+        Ok(value)
     }
 
     /// Resolves the environment that contains the variable with the given name.
-    fn resolve(env: &Rc<RefCell<Self>>, name: &str) -> Result<Rc<RefCell<Env>>, EnvError> {
-        if env.borrow().values.contains_key(name) {
-            return Ok(Rc::clone(env));
+    fn resolve(
+        env: &Arc<Mutex<Self>>,
+        name: &str,
+        span: SourceSpan,
+    ) -> Result<Arc<Mutex<Env>>, EnvError> {
+        if env.lock().unwrap().values.contains_key(name) {
+            return Ok(Arc::clone(env));
         }
 
-        match &env.borrow().parent {
-            Some(parent) => Self::resolve(parent, name),
-            None => Err(EnvError::Declaration(name.to_string())),
+        match &env.lock().unwrap().parent {
+            Some(parent) => Self::resolve(parent, name, span),
+            None => Err(EnvError::IdentifierNotFound { span }),
         }
     }
 }
@@ -180,32 +218,41 @@ mod tests {
 
         let name = "foo";
         let value = Val::Int(0);
+        let span = (0, 3).into();
 
         // Declare a variable in the environment
-        env.borrow_mut()
-            .declare(name.to_string(), value.clone())
+        env.lock()
+            .unwrap()
+            .declare(name.to_string(), value.clone(), span)
             .expect("should be able to declare variable");
 
         // Lookup the variable
-        let result = Env::lookup(&env, &name).expect("variable should exist");
+        let result = Env::lookup(&env, &name, span).expect("variable should exist");
         assert_eq!(result, value);
     }
 
     #[test]
     fn declare_error() {
         let env = Env::new();
+        let mut env = env.lock().unwrap();
 
         let name = "foo";
         let value = Val::Int(0);
+        let span = (0, 3).into();
 
         // Declare a variable in the environment
-        env.borrow_mut()
-            .declare(name.to_string(), value.clone())
+        env.declare(name.to_string(), value.clone(), span)
             .expect("should be able to declare variable");
 
         // Attempt to redeclare the same variable
-        let result = env.borrow_mut().declare(name.to_string(), value.clone());
-        assert!(matches!(result, Err(EnvError::Duplicate(_))));
+        let result = env
+            .declare(name.to_string(), value.clone(), span)
+            .expect_err("result should be an error");
+
+        assert!(matches!(
+            result.downcast_ref::<EnvError>(),
+            Some(&EnvError::IdentifierAlreadyExists { span: _span })
+        ));
     }
 
     #[test]
@@ -214,8 +261,14 @@ mod tests {
 
         // Attempt to lookup a non-existent variable
         let name = "foo";
-        let result = Env::lookup(&env, &name);
-        assert!(matches!(result, Err(EnvError::Declaration(_))));
+        let span = (0, 3).into();
+
+        let result = Env::lookup(&env, &name, span).expect_err("result should be an error");
+
+        assert!(matches!(
+            result.downcast_ref::<EnvError>(),
+            Some(EnvError::IdentifierNotFound { span: _span })
+        ));
     }
 
     #[test]
@@ -224,19 +277,21 @@ mod tests {
 
         let name = "foo";
         let value = Val::Int(0);
+        let span = (0, 3).into();
 
         // Declare a variable in the environment
-        env.borrow_mut()
-            .declare(name.to_string(), value.clone())
+        env.lock()
+            .unwrap()
+            .declare(name.to_string(), value.clone(), span)
             .expect("should be able to declare variable");
 
         // Assign a new value to the variable
         let value = Val::Int(1);
-        Env::assign(&env, name.to_string(), value.clone())
+        Env::assign(&env, name.to_string(), value.clone(), span)
             .expect("should be able to assign value to variable");
 
         // Lookup the variable
-        let result = Env::lookup(&env, &name).expect("should be able to lookup variable");
+        let result = Env::lookup(&env, &name, span).expect("should be able to lookup variable");
         assert_eq!(result, value);
     }
 
@@ -246,30 +301,34 @@ mod tests {
 
         let name = "foo";
         let value = Val::Int(0);
+        let span = (0, 3).into();
 
         // Declare a variable in the parent environment
         parent_env
-            .borrow_mut()
-            .declare(name.to_string(), value.clone())
+            .lock()
+            .unwrap()
+            .declare(name.to_string(), value.clone(), span)
             .expect("should be able to declare variable");
 
         // Create a child environment with the parent environment
-        let child_env = Env::with_parent(Rc::clone(&parent_env));
+        let child_env = Env::with_parent(Arc::clone(&parent_env));
 
         // Lookup the variable from the child environment
-        let result = Env::lookup(&child_env, &name);
+        let result = Env::lookup(&child_env, &name, span);
         assert_eq!(result.unwrap(), value.clone());
 
         // Declare a new variable in the parent environment
         let name = "bar";
         let value = Val::Int(0);
         parent_env
-            .borrow_mut()
-            .declare(name.to_string(), value.clone())
+            .lock()
+            .unwrap()
+            .declare(name.to_string(), value.clone(), span)
             .expect("should be able to declare variable");
 
         // Lookup the new variable from the child environment
-        let result = Env::lookup(&child_env, &name).expect("should be able to lookup variable");
+        let result =
+            Env::lookup(&child_env, &name, span).expect("should be able to lookup variable");
         assert_eq!(result, value);
     }
 }

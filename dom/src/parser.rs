@@ -12,7 +12,7 @@
 use std::collections::VecDeque;
 use std::i32;
 
-use miette::{Diagnostic, SourceSpan};
+use miette::{Diagnostic, Result, SourceSpan};
 use thiserror::Error;
 
 use crate::ast::{BinaryOp, Cond, Expr, ExprKind, Func, Ident, Loop, Stmt, UnaryOp, Var};
@@ -23,96 +23,72 @@ pub enum ParserError {
     #[error("expected left brace `{{` following conditional statement")]
     #[diagnostic(code(parser::cond_block_begin))]
     CondBlockBegin {
-        #[source_code]
-        src: String,
         #[label("this conditional is missing a `{{` to start its body")]
         span: SourceSpan,
     },
     #[error("expected right brace `}}` to end conditional block")]
     #[diagnostic(code(parser::cond_block_end))]
     CondBlockEnd {
-        #[source_code]
-        src: String,
         #[label("this conditional is missing a `}}` to end its body")]
         span: SourceSpan,
     },
     #[error("invalid identifier following `fn` keyword")]
     #[diagnostic(code(parser::fn_identifier))]
     FnIdentifier {
-        #[source_code]
-        src: String,
         #[label("invalid identifier here")]
         span: SourceSpan,
     },
     #[error("expected left parenthesis `(` following identifier to begin function arguments")]
     #[diagnostic(code(parser::fn_args_begin))]
     FnArgsBegin {
-        #[source_code]
-        src: String,
         #[label("expected `(` following this identifier")]
         span: SourceSpan,
     },
     #[error("expected only identifiers in function arguments")]
     #[diagnostic(code(parser::fn_args))]
     FnArgs {
-        #[source_code]
-        src: String,
         #[label("this function has non-identifier arguments")]
         span: SourceSpan,
     },
     #[error("expected right parenthesis `)` to end argument list")]
     #[diagnostic(code(parser::fn_args_end))]
     FnArgsEnd {
-        #[source_code]
-        src: String,
         #[label("this function's arguments are never ended")]
         span: SourceSpan,
     },
     #[error("expected left brace `{{` following function arguments")]
     #[diagnostic(code(parser::fn_block_begin))]
     FnBlockBegin {
-        #[source_code]
-        src: String,
         #[label("this function is missing a `{{` to start its body")]
         span: SourceSpan,
     },
     #[error("expected right brace `}}` to end function block")]
     #[diagnostic(code(parser::fn_block_end))]
     FnBlockEnd {
-        #[source_code]
-        src: String,
         #[label("this function is missing a `}}` to end its body")]
         span: SourceSpan,
     },
     #[error("invalid identifier following `let` keyword")]
     #[diagnostic(code(parser::var_identifier))]
     VarIdentifier {
-        #[source_code]
-        src: String,
         #[label("invalid identifier here")]
         span: SourceSpan,
     },
     #[error("expected assignment operator `=` following identifier in variable declaration")]
     #[diagnostic(code(parser::var_assignment))]
     VarAssignment {
-        #[source_code]
-        src: String,
         #[label("expected `=` following this identifier")]
         span: SourceSpan,
     },
     #[error("expected left brace `{{` following loop statement")]
     #[diagnostic(code(parser::loop_block_begin))]
     LoopBlockBegin {
-        #[source_code]
-        src: String,
         #[label("this loop is missing a `{{` to start its body")]
         span: SourceSpan,
     },
     #[error("expected right brace `}}` to end loop block")]
     #[diagnostic(code(parser::loop_block_end))]
     LoopBlockEnd {
-        #[source_code]
-        src: String,
         #[label("this loop is missing a `}}` to end its body")]
         span: SourceSpan,
     },
@@ -120,18 +96,9 @@ pub enum ParserError {
     #[diagnostic(code(parser::unsupported_token))]
     Unsupported {
         kind: TokenKind,
-        #[source_code]
-        src: String,
         #[label("unsupported token")]
         span: SourceSpan,
     },
-}
-
-impl ParserError {
-    pub fn to_report(self) -> String {
-        let report: miette::ErrReport = self.into();
-        format!("{report:?}")
-    }
 }
 
 enum Process {
@@ -142,7 +109,7 @@ enum Process {
 
 pub struct Parser {
     tokens: VecDeque<Token>,
-    source: String,
+    src: String,
 }
 
 impl Default for Parser {
@@ -153,22 +120,16 @@ impl Default for Parser {
 
 impl Parser {
     #[must_use]
-    pub fn new(source: String) -> Self {
+    pub fn new(src: String) -> Self {
         Self {
             tokens: vec![].into(),
-            source,
+            src,
         }
     }
 
-    pub fn produce_ast(&mut self) -> Result<Stmt, ParserError> {
+    pub fn produce_ast(&mut self) -> Result<Stmt> {
         // Retrieve tokens from the lexer
-        let mut lexer = Lexer::new(self.source.to_string());
-
-        let Ok(tokens) = lexer.tokenize() else {
-            // TODO: No panic
-            panic!("lexer err");
-        };
-        self.tokens = tokens.into();
+        self.tokens = Lexer::new(self.src.clone()).tokenize()?.into();
 
         // Build out the program body
         let body = self.process(|token| match token {
@@ -181,7 +142,7 @@ impl Parser {
         Ok(program)
     }
 
-    fn process<F>(&mut self, mut p: F) -> Result<Vec<Stmt>, ParserError>
+    fn process<F>(&mut self, mut p: F) -> Result<Vec<Stmt>>
     where
         F: FnMut(&TokenKind) -> Process,
     {
@@ -217,19 +178,19 @@ impl Parser {
         self.tokens.pop_front().expect("tokens should not be empty")
     }
 
-    fn expect(&mut self, kind: &TokenKind, error: ParserError) -> Result<(), ParserError> {
+    fn expect(&mut self, kind: &TokenKind, error: ParserError) -> Result<()> {
         if self.tokens.is_empty() {
-            return Err(error);
+            return Err(error.into());
         }
 
         if &self.consume().kind != kind {
-            return Err(error);
+            return Err(error.into());
         }
 
         Ok(())
     }
 
-    fn parse_stmt(&mut self) -> Result<Stmt, ParserError> {
+    fn parse_stmt(&mut self) -> Result<Stmt> {
         let Some(token) = self.peek() else {
             unreachable!();
         };
@@ -245,17 +206,11 @@ impl Parser {
         Ok(stmt)
     }
 
-    fn parse_loop(&mut self) -> Result<Loop, ParserError> {
+    fn parse_loop(&mut self) -> Result<Loop> {
         // Consume the `loop` keyword
-        let token = self.consume();
+        let span = self.consume().span;
 
-        self.expect(
-            &TokenKind::LeftBrace,
-            ParserError::LoopBlockBegin {
-                src: self.source.clone(),
-                span: token.span,
-            },
-        )?;
+        self.expect(&TokenKind::LeftBrace, ParserError::LoopBlockBegin { span })?;
 
         let body = self.process(|token| match token {
             TokenKind::RightBrace => Process::Break,
@@ -263,39 +218,25 @@ impl Parser {
             _ => Process::Push,
         })?;
 
-        self.expect(
-            &TokenKind::RightBrace,
-            ParserError::LoopBlockEnd {
-                src: self.source.clone(),
-                span: token.span,
-            },
-        )?;
+        self.expect(&TokenKind::RightBrace, ParserError::LoopBlockEnd { span })?;
 
-        Ok(Loop { body })
+        Ok(Loop { body, span })
     }
 
-    fn parse_func(&mut self) -> Result<Func, ParserError> {
+    fn parse_func(&mut self) -> Result<Func> {
         // Consume the `fn` keyword
         self.consume();
 
         let ident_token = self.consume();
+        let span = ident_token.span;
 
         let TokenKind::Ident(ident) = ident_token.kind else {
-            return Err(ParserError::FnIdentifier {
-                src: self.source.clone(),
-                span: ident_token.span,
-            });
+            return Err(ParserError::FnIdentifier { span }.into());
         };
 
-        self.expect(
-            &TokenKind::LeftParen,
-            ParserError::FnArgsBegin {
-                src: self.source.clone(),
-                span: ident_token.span,
-            },
-        )?;
+        self.expect(&TokenKind::LeftParen, ParserError::FnArgsBegin { span })?;
 
-        let (args, len) = self.parse_args()?;
+        let (args, last) = self.parse_args()?;
 
         let params: Result<Vec<Ident>, ()> = args
             .into_iter()
@@ -306,28 +247,13 @@ impl Parser {
             .collect();
 
         let Ok(params) = params else {
-            let span = (ident_token.span.offset(), ident_token.span.len() + len);
-            return Err(ParserError::FnArgs {
-                src: self.source.clone(),
-                span: span.into(),
-            });
+            let span = (span.offset(), last - span.offset() + 1).into();
+            return Err(ParserError::FnArgs { span }.into());
         };
 
-        self.expect(
-            &TokenKind::RightParen,
-            ParserError::FnArgsEnd {
-                src: self.source.clone(),
-                span: ident_token.span,
-            },
-        )?;
+        self.expect(&TokenKind::RightParen, ParserError::FnArgsEnd { span })?;
 
-        self.expect(
-            &TokenKind::LeftBrace,
-            ParserError::FnBlockBegin {
-                src: self.source.clone(),
-                span: ident_token.span,
-            },
-        )?;
+        self.expect(&TokenKind::LeftBrace, ParserError::FnBlockBegin { span })?;
 
         let body = self.process(|token| match token {
             TokenKind::RightBrace => Process::Break,
@@ -335,62 +261,52 @@ impl Parser {
             _ => Process::Push,
         })?;
 
-        self.expect(
-            &TokenKind::RightBrace,
-            ParserError::FnBlockEnd {
-                src: self.source.clone(),
-                span: ident_token.span,
-            },
-        )?;
+        self.expect(&TokenKind::RightBrace, ParserError::FnBlockEnd { span })?;
 
         let func = Func {
             ident,
             params,
             body,
+            span,
         };
 
         Ok(func)
     }
 
-    fn parse_args(&mut self) -> Result<(Vec<Expr>, usize), ParserError> {
+    fn parse_args(&mut self) -> Result<(Vec<Expr>, usize)> {
         let mut args = Vec::new();
-        let mut len = 0;
+        // To keep track of the last column of the last [`Expr`]
+        let mut last = 0;
 
         if self.peek_kind() == Some(&TokenKind::RightParen) {
-            self.consume();
-            return Ok((args, 0));
+            return Ok((args, last));
         }
 
-        // First argument won't be preceded by a separator
-        let arg = self.parse_assignment_expr()?;
-        len += arg.span.len();
-        args.push(arg);
-
-        // Get all separated arguments
-        while self.peek_kind() == Some(&TokenKind::Separator) {
-            self.consume();
-            // TODO: Better error handling for no more tokens
+        loop {
+            // First argument won't be preceded by a separator
             let arg = self.parse_assignment_expr()?;
-            len += arg.span.len();
+            last = arg.span.offset() + arg.span.len();
             args.push(arg);
+
+            // Subsequent arguments will be
+            if self.peek_kind() == Some(&TokenKind::Separator) {
+                self.consume();
+            } else {
+                break;
+            }
         }
 
-        Ok((args, len))
+        Ok((args, last))
     }
 
-    fn parse_cond(&mut self) -> Result<Cond, ParserError> {
+    fn parse_cond(&mut self) -> Result<Cond> {
         // Consume the `if` keyword
         self.consume();
 
         let condition = self.parse_expr()?;
+        let span = condition.span;
 
-        self.expect(
-            &TokenKind::LeftBrace,
-            ParserError::CondBlockBegin {
-                src: self.source.clone(),
-                span: condition.span,
-            },
-        )?;
+        self.expect(&TokenKind::LeftBrace, ParserError::CondBlockBegin { span })?;
 
         let body = self.process(|token| match token {
             TokenKind::RightBrace => Process::Break,
@@ -398,20 +314,18 @@ impl Parser {
             _ => Process::Push,
         })?;
 
-        self.expect(
-            &TokenKind::RightBrace,
-            ParserError::CondBlockEnd {
-                src: self.source.clone(),
-                span: condition.span,
-            },
-        )?;
+        self.expect(&TokenKind::RightBrace, ParserError::CondBlockEnd { span })?;
 
-        let cond = Cond { condition, body };
+        let cond = Cond {
+            condition,
+            body,
+            span,
+        };
 
         Ok(cond)
     }
 
-    fn parse_var(&mut self) -> Result<Var, ParserError> {
+    fn parse_var(&mut self) -> Result<Var> {
         // Consume the `let` keyword
         self.consume();
 
@@ -419,15 +333,14 @@ impl Parser {
 
         let TokenKind::Ident(ident) = ident_token.kind else {
             return Err(ParserError::VarIdentifier {
-                src: self.source.clone(),
                 span: ident_token.span,
-            });
+            }
+            .into());
         };
 
         self.expect(
             &TokenKind::Assignment,
             ParserError::VarAssignment {
-                src: self.source.clone(),
                 span: ident_token.span,
             },
         )?;
@@ -435,16 +348,17 @@ impl Parser {
         let var = Var {
             ident,
             value: Box::new(self.parse_expr()?.into()),
+            span: ident_token.span,
         };
 
         Ok(var)
     }
 
-    fn parse_expr(&mut self) -> Result<Expr, ParserError> {
+    fn parse_expr(&mut self) -> Result<Expr> {
         self.parse_assignment_expr()
     }
 
-    fn parse_assignment_expr(&mut self) -> Result<Expr, ParserError> {
+    fn parse_assignment_expr(&mut self) -> Result<Expr> {
         let mut left = self.parse_comparison_expr()?;
 
         if self.peek_kind() == Some(&TokenKind::Assignment) {
@@ -468,7 +382,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_comparison_expr(&mut self) -> Result<Expr, ParserError> {
+    fn parse_comparison_expr(&mut self) -> Result<Expr> {
         let mut left = self.parse_additive_expr()?;
 
         if let Some(&TokenKind::CmpOp(op)) = self.peek_kind() {
@@ -494,7 +408,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_additive_expr(&mut self) -> Result<Expr, ParserError> {
+    fn parse_additive_expr(&mut self) -> Result<Expr> {
         let mut left = self.parse_multiplicative_expr()?;
 
         while let Some(kind) = self.peek_kind() {
@@ -526,7 +440,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_multiplicative_expr(&mut self) -> Result<Expr, ParserError> {
+    fn parse_multiplicative_expr(&mut self) -> Result<Expr> {
         let mut left = self.parse_unary_expr()?;
 
         while let Some(kind) = self.peek_kind() {
@@ -558,7 +472,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_unary_expr(&mut self) -> Result<Expr, ParserError> {
+    fn parse_unary_expr(&mut self) -> Result<Expr> {
         match self.peek_kind() {
             Some(&TokenKind::Plus | &TokenKind::Minus | &TokenKind::Bang) => {
                 let token = self.consume();
@@ -570,6 +484,7 @@ impl Parser {
                     _ => unreachable!(),
                 };
 
+                // We should keep parsing as many unary operators as we can
                 let right = self.parse_unary_expr()?;
                 let span = (
                     token.span.offset(),
@@ -578,8 +493,7 @@ impl Parser {
 
                 Ok(Expr {
                     kind: ExprKind::UnaryOp {
-                        // We should keep parsing as many unary operators as we can
-                        expr: Box::new(self.parse_unary_expr()?),
+                        expr: Box::new(right),
                         op,
                     },
                     span: span.into(),
@@ -589,23 +503,20 @@ impl Parser {
         }
     }
 
-    fn parse_call_expr(&mut self) -> Result<Expr, ParserError> {
+    fn parse_call_expr(&mut self) -> Result<Expr> {
         let mut left = self.parse_primary_expr()?;
 
         if self.peek_kind() == Some(&TokenKind::LeftParen) {
-            let token = self.consume();
+            self.consume();
 
-            let (args, len) = self.parse_args()?;
+            let (args, last) = self.parse_args()?;
 
             self.expect(
                 &TokenKind::RightParen,
-                ParserError::FnArgsEnd {
-                    src: self.source.clone(),
-                    span: left.span,
-                },
+                ParserError::FnArgsEnd { span: left.span },
             )?;
 
-            let span = (left.span.offset(), left.span.len() + token.span.len() + len);
+            let span = (left.span.offset(), last - left.span.offset() + 1);
 
             left = Expr {
                 kind: ExprKind::Call {
@@ -619,7 +530,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_primary_expr(&mut self) -> Result<Expr, ParserError> {
+    fn parse_primary_expr(&mut self) -> Result<Expr> {
         let token = self.consume();
 
         let expr = match token.kind {
@@ -681,9 +592,9 @@ impl Parser {
             _ => {
                 return Err(ParserError::Unsupported {
                     kind: token.kind,
-                    src: self.source.clone(),
                     span: token.span,
-                })
+                }
+                .into())
             }
         };
 

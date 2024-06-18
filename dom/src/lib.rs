@@ -6,5 +6,5 @@ mod parser;
 mod util;
 
 pub use environment::{Env, Val};
-pub use interpreter::eval;
+pub use interpreter::Interpreter;
 pub use parser::Parser;
