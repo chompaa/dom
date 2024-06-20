@@ -239,6 +239,7 @@ impl Parser {
         self.expect(&TokenKind::LeftParen, ParserError::FnArgsBegin { span })?;
 
         let (args, last) = self.parse_args()?;
+        let last = last.unwrap_or(span.offset());
 
         let params: Result<Vec<Ident>, ()> = args
             .into_iter()
@@ -275,19 +276,19 @@ impl Parser {
         Ok(func)
     }
 
-    fn parse_args(&mut self) -> Result<(Vec<Expr>, usize)> {
+    fn parse_args(&mut self) -> Result<(Vec<Expr>, Option<usize>)> {
         let mut args = Vec::new();
-        // To keep track of the last column of the last [`Expr`]
-        let mut last = 0;
 
         if self.peek_kind() == Some(&TokenKind::RightParen) {
-            return Ok((args, last));
+            return Ok((args, None));
         }
 
+        // To keep track of the last column of the last [`Expr`]
+        let mut last;
         loop {
             // First argument won't be preceded by a separator
             let arg = self.parse_assignment_expr()?;
-            last = arg.span.offset() + arg.span.len();
+            last = Some(arg.span.offset() + arg.span.len());
             args.push(arg);
 
             // Subsequent arguments will be
@@ -564,6 +565,7 @@ impl Parser {
             self.consume();
 
             let (args, last) = self.parse_args()?;
+            let last = last.unwrap_or(left.span.offset());
 
             self.expect(
                 &TokenKind::RightParen,
