@@ -1,4 +1,4 @@
-import { interpret, set_hook } from "dom-wasm";
+import { interpret, set_hook, init_panic_hook } from "dom-wasm";
 import { editor } from "monaco-editor";
 import { useRef, useState, useEffect } from "react";
 import "./App.css";
@@ -27,6 +27,7 @@ const App = () => {
   };
 
   useEffect(() => {
+    init_panic_hook();
     set_hook();
   }, []);
 

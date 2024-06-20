@@ -5,7 +5,12 @@ use wasm_bindgen::prelude::*;
 use web_sys::console;
 
 #[wasm_bindgen]
-pub fn set_hook() {
+pub fn init_panic_hook() {
+    console_error_panic_hook::set_once();
+}
+
+#[wasm_bindgen]
+pub fn init_miette_hook() {
     // This is important since in wasm builds, unicode will be disabled by default.
     let _ = miette::set_hook(Box::new(|_| {
         Box::new(
