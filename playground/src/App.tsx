@@ -1,12 +1,12 @@
-import { interpret, set_hook, init_panic_hook } from "dom-wasm";
+import Ansi from "ansi-to-react";
+import { init_miette_hook, init_panic_hook, interpret } from "dom-wasm";
 import { editor } from "monaco-editor";
-import { useRef, useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import Editor from "./components/Editor";
 import TabItem from "./components/TabItem";
 import TabList from "./components/TabList";
 import useOutput from "./hooks/useOutput";
-import Ansi from "ansi-to-react";
 
 const App = () => {
   const editorRef = useRef<null | editor.IStandaloneCodeEditor>(null);
@@ -27,8 +27,8 @@ const App = () => {
   };
 
   useEffect(() => {
+    init_miette_hook();
     init_panic_hook();
-    set_hook();
   }, []);
 
   return (
