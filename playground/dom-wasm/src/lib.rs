@@ -1,6 +1,7 @@
-use std::fmt::Write as _;
+mod std;
 
-use dom::{Env, Interpreter, Parser, Val};
+use dom::{declare_native_func, Env, Interpreter, Parser, Val};
+
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
@@ -27,17 +28,7 @@ pub fn init_miette_hook() {
 pub fn interpret(source: &str) -> String {
     let env = Env::new();
 
-    env.lock().unwrap().declare_unchecked(
-        "print".to_owned(),
-        Val::NativeFunc(Box::new(|args, _| {
-            let joined = args.iter().fold(String::new(), |mut output, arg| {
-                let _ = write!(output, "{arg} ");
-                output
-            });
-            console::log_1(&joined.into());
-            None
-        })),
-    );
+    declare_native_func!(env, std::print);
 
     let (ast, program) = match Parser::new(source.to_string()).produce_ast() {
         Ok(program) => (format!("{program:#?}"), program),
