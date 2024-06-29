@@ -32,11 +32,11 @@ const App = () => {
   }, []);
 
   return (
-    <main className="h-screen flex flex-row bg-white">
-      <section className="w-full relative border-r-2 border-gray-100 flex flex-col">
-        <div className=" h-12 bg-gray-50 flex flex-row text-gray-500 items-center gap-2">
+    <main className="flex h-screen flex-row bg-white">
+      <section className="relative flex w-full flex-col border-r-2 border-gray-100">
+        <div className="flex h-12 flex-row items-center gap-2 bg-gray-50 text-gray-500">
           <button
-            className="bg-gray-100 border-gray-500 hover:bg-gray-500 hover:text-gray-100 border-2 px-2 m-1"
+            className="m-1 border-2 border-gray-500 bg-gray-100 px-2 hover:bg-gray-500 hover:text-gray-100"
             onClick={run}
           >
             run
@@ -46,7 +46,7 @@ const App = () => {
           <Editor editorRef={editorRef} />
         </div>
       </section>
-      <section className="flex flex-col w-full max-h-full relative bg-white border-l-2 border-gray-100 overflow-x-scroll">
+      <section className="relative flex max-h-full w-full flex-col overflow-x-scroll border-l-2 border-gray-100 bg-white">
         <TabList activeTabIndex={0}>
           <TabItem label="output">
             <pre>

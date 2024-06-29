@@ -8,7 +8,7 @@ const TabItem = ({
   children: ReactNode;
   label: string;
 }) => (
-  <div className="flex flex-col flex-1 w-full p-1 overflow-y-scroll hide-scrollbar">
+  <div className="hide-scrollbar flex w-full flex-1 flex-col overflow-y-scroll p-1">
     {children}
   </div>
 );
