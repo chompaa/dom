@@ -1,4 +1,4 @@
-use dom::{declare_native_func, std, Env, Interpreter, Parser, Val};
+use dom_core::{declare_native_func, std, Env, Interpreter, Parser, Val};
 
 use ::std::{
     fs::read_to_string,

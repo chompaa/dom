@@ -6,14 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:wasm": "wasm-pack build dom-wasm && bun install",
+    "build:wasm": "wasm-pack build ../dom_wasm && bun install",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
     "ansi-to-react": "^6.1.6",
-    "dom-wasm": "./dom-wasm/pkg",
+    "dom-wasm": "../dom_wasm/pkg",
     "monaco-editor": "^0.49.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

@@ -1,6 +1,6 @@
 mod std;
 
-use dom::{declare_native_func, Env, Interpreter, Parser, Val};
+use dom_core::{declare_native_func, Env, Interpreter, Parser, Val};
 
 use wasm_bindgen::prelude::*;
 use web_sys::console;

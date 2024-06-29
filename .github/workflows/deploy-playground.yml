@@ -22,16 +22,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./playground
+        working-directory: ./www
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v1
       - uses: dtolnay/rust-toolchain@stable
       - uses: jetli/wasm-pack-action@v0.4.0
-      - name: Pack `dom-wasm`
-        run: wasm-pack build dom-wasm 
-      - name: Install dependencies
-        run: bun install && bun install ./dom-wasm/pkg
+      - name: Build WASM Binary and Install Dependencies
+        run: bun run build:wasm
       - name: Build
         run: bun run build
       - name: Setup Pages
@@ -39,7 +37,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "./playground/dist"
+          path: "./www/dist"
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
