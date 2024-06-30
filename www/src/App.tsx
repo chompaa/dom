@@ -9,6 +9,7 @@ import TabList from "./components/TabList";
 import useOutput from "./hooks/useOutput";
 
 const App = () => {
+  const source = "https://github.com/chompaa/dom";
   const editorRef = useRef<null | editor.IStandaloneCodeEditor>(null);
   const [output, writeOutput, clearOutput] = useOutput();
   const [ast, setAst] = useState("");
@@ -32,33 +33,45 @@ const App = () => {
   }, []);
 
   return (
-    <main className="flex h-screen flex-row bg-white">
-      <section className="relative flex w-full flex-col border-r-2 border-gray-100">
-        <div className="flex h-12 flex-row items-center gap-2 bg-gray-50 text-gray-500">
-          <button
-            className="m-1 border-2 border-gray-500 bg-gray-100 px-2 hover:bg-gray-500 hover:text-gray-100"
-            onClick={run}
-          >
-            run
-          </button>
-        </div>
-        <div className="flex flex-1">
-          <Editor editorRef={editorRef} />
-        </div>
+    <div className="flex h-screen max-h-screen flex-col overflow-hidden">
+      <section className="flex items-center justify-between bg-zinc-800 py-1 pl-2 text-zinc-50">
+        <h1>dom playground</h1>
+        <a
+          className="mr-1 border-2 border-zinc-100 bg-zinc-800 px-2 hover:bg-zinc-100 hover:text-zinc-800"
+          href={source}
+          target="_blank"
+        >
+          source
+        </a>
       </section>
-      <section className="relative flex max-h-full w-full flex-col overflow-x-scroll border-l-2 border-gray-100 bg-white">
-        <TabList activeTabIndex={0}>
-          <TabItem label="output">
-            <pre>
-              <Ansi className="font-primary text-2xl">{output}</Ansi>
-            </pre>
-          </TabItem>
-          <TabItem label="ast">
-            <pre className="font-primary text-2xl">{ast}</pre>
-          </TabItem>
-        </TabList>
-      </section>
-    </main>
+      <main className="flex h-full flex-row bg-white">
+        <section className="relative flex w-full flex-col border-r-2 border-zinc-100">
+          <div className="flex h-12 flex-row items-center gap-2 bg-zinc-50 text-zinc-800">
+            <button
+              className="m-1 border-2 border-zinc-800 bg-zinc-100 px-2 hover:bg-zinc-800 hover:text-zinc-100"
+              onClick={run}
+            >
+              run
+            </button>
+          </div>
+          <div className="flex flex-1">
+            <Editor editorRef={editorRef} />
+          </div>
+        </section>
+        <section className="relative flex max-h-full w-full flex-col overflow-x-scroll border-l-2 border-zinc-100 bg-white">
+          <TabList activeTabIndex={0}>
+            <TabItem label="output">
+              <pre>
+                <Ansi className="font-primary text-2xl">{output}</Ansi>
+              </pre>
+            </TabItem>
+            <TabItem label="ast">
+              <pre className="font-primary text-2xl">{ast}</pre>
+            </TabItem>
+          </TabList>
+        </section>
+      </main>
+    </div>
   );
 };
 
