@@ -16,6 +16,7 @@ You can try Dom for yourself using the playground [here](https://chompaa.github.
     - [x] Integers
     - [ ] Floats
     - [x] Strings
+    - [x] Lists
 - [ ] Variables
     - [x] Mutable
     - [ ] Constant
@@ -28,9 +29,9 @@ You can try Dom for yourself using the playground [here](https://chompaa.github.
     - [x] Built-in
 - [x] Loops
 - [ ] Control flow
-    - [ ] Conditional statements
+    - [x] Conditional statements
         - [x] Single conditions
-        - [ ] Multiple conditions
+        - [x] Multiple conditions
     - [x] Return
     - [x] Continue
     - [x] Break
@@ -49,7 +50,7 @@ They are not parsed in any manner.
 
 ### Comparison
 
-Comparison uses the usual operators:
+Numerical comparison uses the usual operators:
 
 ```js
 let foo = 1
@@ -61,13 +62,15 @@ print(foo != bar) // true
 print(foo == bar) // false
 ```
 
-Currently supported operations are:
-- Equal `==`
-- Not equal `!=`
-- Less than `<`
-- Less than or equal `<=`
-- Greater than `>`
-- Greater than or equal `>=`
+Likewise, for binary comparisons:
+
+```js
+let foo = true
+let bar = false
+
+print(foo && bar) // false
+print(foo || bar) // true
+```
 
 ### Arithmetic
 
@@ -110,6 +113,17 @@ if foo < bar {
 }
 ```
 
+### Lists
+
+Lists can be created using brackets `[..]`:
+
+```rust
+let list = [0, "foo", 1, "bar"]
+print(get(list, 1)) // "foo"
+```
+
+There are built-in functions for working with lists: `get`, `set`, `push`, `del`, and `len`.
+
 ### Functions
 
 Functions are defined using the `fn` keyword as follows:
@@ -130,9 +144,18 @@ Arguments are always passed by value, for now.
 
 Dom also contains some built-in functions, which can be seen below:
 
-| Function | Arguments | Example | Description |
-| --- | --- | --- | --- |
-| `print` | `Int \| Str` | `print("Hello, world")` | Outputs a literal to the console
+![NOTE]: These functions don't produce errors right now, i.e. for incorrect arguments or runtime errors.
+
+| Function | Arguments | Description |
+| --- | --- | --- |
+| `print` | `Any` | Outputs a literal to the console | |
+| `input` | `None` | Requests and returns input from the console. Not supported in `dom_wasm` |
+| `get` | `List, Int` | Gets an item at a specified index from a `List` 
+| `set` | `List, Int, Any` | Sets an item at a specified index in a `List` 
+| `push` | `List, Any` | Pushes an item to the end of a `List` 
+| `del` | `List, Int` | Deletes an item at a specified index in a `List` 
+| `len` | `List, Int` | Returns the length of a `List` 
+
 
 ### Loops
 
@@ -158,25 +181,25 @@ loop {
 
 </details>
 
-## Interpreting 
+## Running locally 
 
 Make sure you have the Rust toolchain installed.
 
 - Clone this repository and navigate to it:
 
 ```sh
-git clone https://github.com/chompaa/dom && cd dom/dom
+git clone https://github.com/chompaa/dom && cd dom
 ```
 
 - To start the interactive shell:
 
 ```sh
-cargo run
+cargo run -p dom_cli
 ```
 
 - To interpret a file:
 
 ```sh
-cargo run <file>
+cargo run -p dom_cli <file>
 ```
 

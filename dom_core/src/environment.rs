@@ -26,7 +26,7 @@ pub enum EnvError {
     },
 }
 
-pub trait CloneableFn: FnMut(Vec<Val>, Arc<Mutex<Env>>) -> Option<Val> {
+pub trait CloneableFn: FnMut(&[Val], &Arc<Mutex<Env>>) -> Option<Val> {
     fn clone_box<'a>(&self) -> Box<dyn CloneableFn + Send + Sync + 'static>
     where
         Self: 'a;
@@ -34,7 +34,7 @@ pub trait CloneableFn: FnMut(Vec<Val>, Arc<Mutex<Env>>) -> Option<Val> {
 
 impl<F> CloneableFn for F
 where
-    F: Fn(Vec<Val>, Arc<Mutex<Env>>) -> Option<Val> + Send + Sync + Clone + 'static,
+    F: Fn(&[Val], &Arc<Mutex<Env>>) -> Option<Val> + Send + Sync + Clone + 'static,
 {
     fn clone_box<'a>(&self) -> Box<dyn CloneableFn + Send + Sync + 'static>
     where
@@ -44,13 +44,13 @@ where
     }
 }
 
-impl<'a> Clone for Box<dyn CloneableFn + Send + Sync + 'static> {
+impl Clone for Box<dyn CloneableFn + Send + Sync + 'static> {
     fn clone(&self) -> Self {
         (**self).clone_box()
     }
 }
 
-impl<'a> std::fmt::Debug for Box<dyn CloneableFn + Send + Sync + 'static> {
+impl std::fmt::Debug for Box<dyn CloneableFn + Send + Sync + 'static> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "NativeFunc")
     }
@@ -58,7 +58,40 @@ impl<'a> std::fmt::Debug for Box<dyn CloneableFn + Send + Sync + 'static> {
 
 /// Runtime values.
 #[derive(Debug, Clone)]
-pub enum Val {
+pub struct Val {
+    /// The identifier of the value (if stored in an environment)
+    pub ident: Option<Ident>,
+    pub kind: ValKind,
+}
+
+impl From<ValKind> for Val {
+    fn from(value: ValKind) -> Self {
+        Self {
+            ident: None,
+            kind: value,
+        }
+    }
+}
+
+impl Val {
+    pub const NONE: Self = Val {
+        ident: None,
+        kind: ValKind::None,
+    };
+
+    pub fn from_kind(kind: ValKind) -> Self {
+        Self { ident: None, kind }
+    }
+
+    pub fn with_ident(mut self, ident: Ident) -> Self {
+        self.ident = Some(ident);
+        self.to_owned()
+    }
+}
+
+/// Value kinds.
+#[derive(Debug, Clone)]
+pub enum ValKind {
     /// Empty value.
     None,
     /// Boolean value.
@@ -76,17 +109,30 @@ pub enum Val {
     },
     /// Built-in function.
     NativeFunc(Box<dyn CloneableFn + Send + Sync>),
+    List(Vec<Val>),
 }
 
 impl std::fmt::Display for Val {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Val::None => write!(f, ""),
-            Val::Bool(bool) => write!(f, "{bool}"),
-            Val::Int(int) => write!(f, "{int}"),
-            Val::Str(value) => write!(f, "{value}"),
-            Val::Func { ident, params, .. } => write!(f, "{ident}({})", params.join(", ")),
-            Val::NativeFunc(func) => write!(f, "{func:?}"),
+        match &self.kind {
+            ValKind::None => write!(f, ""),
+            ValKind::Bool(bool) => write!(f, "{bool}"),
+            ValKind::Int(int) => write!(f, "{int}"),
+            ValKind::Str(value) => write!(f, "{value}"),
+            ValKind::Func { ident, params, .. } => write!(f, "{ident}({})", params.join(", ")),
+            ValKind::NativeFunc(func) => write!(f, "{func:?}"),
+            ValKind::List(items) => {
+                // We shouldn't use `join` here, since we'd need to map every item
+                // using the `format` macro, and then collect
+                write!(f, "[")?;
+                for (idx, item) in items.iter().enumerate() {
+                    write!(f, "{item}")?;
+                    if idx < items.len() - 1 {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, "]")
+            }
         }
     }
 }
@@ -137,9 +183,9 @@ impl Env {
             return Err(EnvError::IdentifierAlreadyExists { span }.into());
         }
 
-        self.values.insert(name, value.clone());
+        self.values.insert(name.clone(), value.clone());
 
-        Ok(value)
+        Ok(value.with_ident(name))
     }
 
     /// Declares a new variable with the given name and value, overwritting any variable that
@@ -162,9 +208,12 @@ impl Env {
         // Find the environment where the variable is declared.
         let env = Self::resolve(env, &name, span)?;
 
-        env.lock().unwrap().values.insert(name, value.clone());
+        env.lock()
+            .unwrap()
+            .values
+            .insert(name.clone(), value.clone());
 
-        Ok(value)
+        Ok(value.with_ident(name))
     }
 
     /// Looks up the value of the variable with the given name.
@@ -179,7 +228,7 @@ impl Env {
             .expect("variable should have a value")
             .clone();
 
-        Ok(value)
+        Ok(value.with_ident(name.to_string()))
     }
 
     /// Resolves the environment that contains the variable with the given name.
@@ -205,9 +254,9 @@ mod tests {
 
     impl PartialEq for Val {
         fn eq(&self, other: &Self) -> bool {
-            match (self, other) {
-                (Val::Int(a), Val::Int(b)) => a == b,
-                _ => false,
+            match (&self.kind, &other.kind) {
+                (ValKind::Int(a), ValKind::Int(b)) => a == b,
+                _ => unreachable!(),
             }
         }
     }
@@ -217,7 +266,7 @@ mod tests {
         let env = Env::new();
 
         let name = "foo";
-        let value = Val::Int(0);
+        let value: Val = ValKind::Int(0).into();
         let span = (0, 3).into();
 
         // Declare a variable in the environment
@@ -237,7 +286,7 @@ mod tests {
         let mut env = env.lock().unwrap();
 
         let name = "foo";
-        let value = Val::Int(0);
+        let value: Val = ValKind::Int(0).into();
         let span = (0, 3).into();
 
         // Declare a variable in the environment
@@ -276,7 +325,7 @@ mod tests {
         let env = Env::new();
 
         let name = "foo";
-        let value = Val::Int(0);
+        let value: Val = ValKind::Int(0).into();
         let span = (0, 3).into();
 
         // Declare a variable in the environment
@@ -286,7 +335,7 @@ mod tests {
             .expect("should be able to declare variable");
 
         // Assign a new value to the variable
-        let value = Val::Int(1);
+        let value: Val = ValKind::Int(1).into();
         Env::assign(&env, name.to_string(), value.clone(), span)
             .expect("should be able to assign value to variable");
 
@@ -300,7 +349,7 @@ mod tests {
         let parent_env = Env::new();
 
         let name = "foo";
-        let value = Val::Int(0);
+        let value: Val = ValKind::Int(0).into();
         let span = (0, 3).into();
 
         // Declare a variable in the parent environment
@@ -319,7 +368,7 @@ mod tests {
 
         // Declare a new variable in the parent environment
         let name = "bar";
-        let value = Val::Int(0);
+        let value: Val = ValKind::Int(0).into();
         parent_env
             .lock()
             .unwrap()

@@ -12,7 +12,6 @@
 //! - Primary Expressions
 
 use std::collections::VecDeque;
-use std::i32;
 
 use miette::{Diagnostic, Result, SourceSpan};
 use thiserror::Error;
@@ -68,6 +67,12 @@ pub enum ParserError {
     #[diagnostic(code(parser::fn_block_end))]
     FnBlockEnd {
         #[label("this function is missing a `}}` to end its body")]
+        span: SourceSpan,
+    },
+    #[error("expected right bracket `]` to end list")]
+    #[diagnostic(code(parser::fn_block_end))]
+    ListItemsEnd {
+        #[label("this list is missing a `]` to terminate")]
         span: SourceSpan,
     },
     #[error("invalid identifier following `let` keyword")]
@@ -238,7 +243,7 @@ impl Parser {
 
         self.expect(&TokenKind::LeftParen, ParserError::FnArgsBegin { span })?;
 
-        let (args, last) = self.parse_args()?;
+        let (args, last) = self.parse_args(&TokenKind::RightParen)?;
         let last = last.unwrap_or(span.offset());
 
         let params: Result<Vec<Ident>, ()> = args
@@ -276,10 +281,10 @@ impl Parser {
         Ok(func)
     }
 
-    fn parse_args(&mut self) -> Result<(Vec<Expr>, Option<usize>)> {
+    fn parse_args(&mut self, end: &TokenKind) -> Result<(Vec<Expr>, Option<usize>)> {
         let mut args = Vec::new();
 
-        if self.peek_kind() == Some(&TokenKind::RightParen) {
+        if self.peek_kind() == Some(end) {
             return Ok((args, None));
         }
 
@@ -554,8 +559,29 @@ impl Parser {
                     span: span.into(),
                 })
             }
-            _ => self.parse_call_expr(),
+            _ => self.parse_list_expr(),
         }
+    }
+
+    fn parse_list_expr(&mut self) -> Result<Expr> {
+        if self.peek_kind() != Some(&TokenKind::LeftBracket) {
+            return self.parse_call_expr();
+        }
+
+        let left = self.consume();
+
+        let (items, last) = self.parse_args(&TokenKind::RightBracket)?;
+        let last = last.unwrap_or(left.span.offset());
+
+        let span = (left.span.offset(), last - left.span.offset()).into();
+
+        self.expect(&TokenKind::RightBracket, ParserError::ListItemsEnd { span })?;
+
+        Ok(Expr {
+            kind: ExprKind::List { items },
+            // `span` doesn't include the end `RightBracket`
+            span: (span.offset(), span.len() + 1).into(),
+        })
     }
 
     fn parse_call_expr(&mut self) -> Result<Expr> {
@@ -564,7 +590,7 @@ impl Parser {
         if self.peek_kind() == Some(&TokenKind::LeftParen) {
             self.consume();
 
-            let (args, last) = self.parse_args()?;
+            let (args, last) = self.parse_args(&TokenKind::RightParen)?;
             let last = last.unwrap_or(left.span.offset());
 
             self.expect(

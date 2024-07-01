@@ -1,4 +1,6 @@
-use crate::{Env, Val};
+use dom_core::{Env, Val};
+
+pub use dom_core::std::*;
 
 use ::std::{
     fmt::Write as _,
@@ -7,7 +9,7 @@ use ::std::{
 
 use web_sys::console;
 
-pub fn print(args: Vec<Val>, _: Arc<Mutex<Env>>) -> Option<Val> {
+pub fn print(args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
     let joined = args.iter().fold(String::new(), |mut output, arg| {
         let _ = write!(output, "{arg} ");
         output

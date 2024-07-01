@@ -7,7 +7,7 @@ pub mod std;
 mod util;
 
 pub use ast::Expr;
-pub use environment::{Env, Val};
+pub use environment::{Env, Val, ValKind};
 pub use interpreter::Interpreter;
 pub use parser::Parser;
 
@@ -20,7 +20,7 @@ macro_rules! declare_native_func {
                 .last()
                 .expect("function path should contain `::`")
                 .to_string(),
-            Val::NativeFunc(Box::new($func)),
+            ValKind::NativeFunc(Box::new($func)).into(),
         );
     };
 }

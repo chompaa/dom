@@ -120,6 +120,9 @@ pub enum ExprKind {
         caller: Box<Expr>,
         args: Vec<Expr>,
     },
+    List {
+        items: Vec<Expr>,
+    },
     /// A string expression.
     Str(String),
     /// An identifier expression.
@@ -178,6 +181,7 @@ impl fmt::Display for ExprKind {
         match self {
             ExprKind::Assignment { .. } => write!(f, "Assignment"),
             ExprKind::Call { .. } => write!(f, "Call"),
+            ExprKind::List { .. } => write!(f, "List"),
             ExprKind::Str { .. } => write!(f, "Str"),
             ExprKind::Ident { .. } => write!(f, "Ident"),
             ExprKind::Bool { .. } => write!(f, "Bool"),

@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::{
     ast::{BinaryOp, Cond, Expr, ExprKind, Func, Ident, LogicOp, Loop, Stmt, UnaryOp, Var},
-    environment::{Env, Val},
+    environment::{Env, Val, ValKind},
     lexer::RelOp,
 };
 
@@ -78,6 +78,12 @@ pub enum Exception {
 
 pub struct Interpreter;
 
+impl Default for Interpreter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Interpreter {
     pub fn new() -> Self {
         Self
@@ -105,6 +111,7 @@ impl Interpreter {
                         self.eval_assign(*assignee, *value, env)
                     }
                     ExprKind::Call { caller, args } => self.eval_call(*caller, args, env, span),
+                    ExprKind::List { items } => self.eval_list_expr(items, env),
                     ExprKind::LogicOp { left, right, op } => {
                         self.eval_logic_expr(*left, *right, op, span, env)
                     }
@@ -116,9 +123,9 @@ impl Interpreter {
                         self.eval_binary_expr(*left, *right, op, span, env)
                     }
                     ExprKind::Ident(ident) => self.eval_ident(&ident, env, span),
-                    ExprKind::Bool(value) => Ok(Val::Bool(value)),
-                    ExprKind::Int(number) => Ok(Val::Int(number)),
-                    ExprKind::Str(value) => Ok(Val::Str(value)),
+                    ExprKind::Bool(value) => Ok(ValKind::Bool(value).into()),
+                    ExprKind::Int(number) => Ok(ValKind::Int(number).into()),
+                    ExprKind::Str(value) => Ok(ValKind::Str(value).into()),
                     ExprKind::Return { value } => Err(Exception::Return(value).into()),
                     ExprKind::Continue => Err(Exception::Continue.into()),
                     ExprKind::Break => Err(Exception::Break.into()),
@@ -131,11 +138,11 @@ impl Interpreter {
         body.into_iter()
             .map(|stmt| self.eval(stmt, env))
             .last()
-            .unwrap_or(Ok(Val::None))
+            .unwrap_or(Ok(Val::NONE))
     }
 
     fn eval_cond(&self, condition: Expr, body: Vec<Stmt>, env: &Arc<Mutex<Env>>) -> Result<Val> {
-        let Val::Bool(success) = self.eval(condition, env)? else {
+        let ValKind::Bool(success) = self.eval(condition, env)?.kind else {
             unreachable!("`Val::Bool` should be returned from condition evaluation");
         };
 
@@ -145,7 +152,7 @@ impl Interpreter {
             return Ok(result);
         }
 
-        Ok(Val::None)
+        Ok(Val::NONE)
     }
 
     fn eval_func(
@@ -156,14 +163,16 @@ impl Interpreter {
         env: &Arc<Mutex<Env>>,
         span: SourceSpan,
     ) -> Result<Val> {
-        let func = Val::Func {
+        let func = ValKind::Func {
             ident: ident.to_owned(),
             params,
             body,
             env: Env::with_parent(Arc::clone(env)),
         };
 
-        env.lock().unwrap().declare(ident.to_owned(), func, span)
+        env.lock()
+            .unwrap()
+            .declare(ident.to_owned(), func.into(), span)
     }
 
     fn eval_loop(&self, body: &Vec<Stmt>, env: &Arc<Mutex<Env>>) -> Result<Val> {
@@ -188,7 +197,7 @@ impl Interpreter {
 
         match last {
             Some(val) => Ok(val),
-            None => Ok(Val::None),
+            None => Ok(Val::NONE),
         }
     }
 
@@ -230,12 +239,12 @@ impl Interpreter {
 
         let caller_span = caller.span;
 
-        match self.eval(caller, env)? {
-            Val::NativeFunc(mut native_func) => match native_func(args, Arc::clone(env)) {
+        match self.eval(caller, env)?.kind {
+            ValKind::NativeFunc(mut native_func) => match native_func(&args, env) {
                 Some(result) => Ok(result),
-                None => Ok(Val::None),
+                None => Ok(Val::NONE),
             },
-            Val::Func {
+            ValKind::Func {
                 params, body, env, ..
             } => {
                 if args.len() != params.len() {
@@ -268,11 +277,20 @@ impl Interpreter {
 
                 match last {
                     Some(val) => Ok(val),
-                    None => Ok(Val::None),
+                    None => Ok(Val::NONE),
                 }
             }
             _ => Err(InterpreterError::InvalidCaller { span: caller_span }.into()),
         }
+    }
+
+    fn eval_list_expr(&self, items: Vec<Expr>, env: &Arc<Mutex<Env>>) -> Result<Val> {
+        let items = items
+            .into_iter()
+            .map(|item| self.eval(item, env))
+            .collect::<Result<Vec<Val>>>()?;
+
+        Ok(ValKind::List(items).into())
     }
 
     fn eval_logic_expr(
@@ -283,10 +301,10 @@ impl Interpreter {
         span: SourceSpan,
         env: &Arc<Mutex<Env>>,
     ) -> Result<Val> {
-        let lhs = self.eval(left.clone(), env)?;
-        let rhs = self.eval(right.clone(), env)?;
+        let lhs = self.eval(left.clone(), env)?.kind;
+        let rhs = self.eval(right.clone(), env)?.kind;
 
-        let (Val::Bool(lhs), Val::Bool(rhs)) = (lhs, rhs) else {
+        let (ValKind::Bool(lhs), ValKind::Bool(rhs)) = (lhs, rhs) else {
             return Err(InterpreterError::LogicalExpressionUnsupported {
                 span,
                 left: left.kind,
@@ -301,7 +319,7 @@ impl Interpreter {
             LogicOp::Or => lhs || rhs,
         };
 
-        Ok(Val::Bool(result))
+        Ok(ValKind::Bool(result).into())
     }
 
     fn eval_rel_expr(
@@ -312,8 +330,8 @@ impl Interpreter {
         span: SourceSpan,
         env: &Arc<Mutex<Env>>,
     ) -> Result<Val> {
-        let lhs = self.eval(left.clone(), env)?;
-        let rhs = self.eval(right.clone(), env)?;
+        let lhs = self.eval(left.clone(), env)?.kind;
+        let rhs = self.eval(right.clone(), env)?.kind;
 
         let err = InterpreterError::RelationalExpressionUnsupported {
             span,
@@ -323,12 +341,12 @@ impl Interpreter {
         };
 
         let result = match (&lhs, &rhs) {
-            (Val::Bool(lhs), Val::Bool(rhs)) => match op {
+            (ValKind::Bool(lhs), ValKind::Bool(rhs)) => match op {
                 RelOp::Eq => lhs == rhs,
                 RelOp::NotEq => lhs != rhs,
                 _ => return Err(err.into()),
             },
-            (Val::Int(lhs), Val::Int(rhs)) => match op {
+            (ValKind::Int(lhs), ValKind::Int(rhs)) => match op {
                 RelOp::Eq => lhs == rhs,
                 RelOp::NotEq => lhs != rhs,
                 RelOp::Greater => lhs > rhs,
@@ -336,7 +354,7 @@ impl Interpreter {
                 RelOp::Less => lhs < rhs,
                 RelOp::LessEq => lhs <= rhs,
             },
-            (Val::Str(lhs), Val::Str(rhs)) => match op {
+            (ValKind::Str(lhs), ValKind::Str(rhs)) => match op {
                 RelOp::Eq => lhs == rhs,
                 RelOp::NotEq => lhs != rhs,
                 _ => return Err(err.into()),
@@ -344,7 +362,7 @@ impl Interpreter {
             _ => return Err(err.into()),
         };
 
-        Ok(Val::Bool(result))
+        Ok(ValKind::Bool(result).into())
     }
 
     fn eval_unary_expr(
@@ -362,14 +380,14 @@ impl Interpreter {
             op,
         };
 
-        match result {
-            Val::Int(value) => match op {
+        match result.kind {
+            ValKind::Int(value) => match op {
                 UnaryOp::Pos => Ok(result),
-                UnaryOp::Neg => Ok(Val::Int(-value)),
+                UnaryOp::Neg => Ok(ValKind::Int(-value).into()),
                 _ => Err(err.into()),
             },
-            Val::Bool(value) => match op {
-                UnaryOp::Not => Ok(Val::Bool(!value)),
+            ValKind::Bool(value) => match op {
+                UnaryOp::Not => Ok(ValKind::Bool(!value).into()),
                 _ => Err(err.into()),
             },
             _ => Err(err.into()),
@@ -384,8 +402,8 @@ impl Interpreter {
         span: SourceSpan,
         env: &Arc<Mutex<Env>>,
     ) -> Result<Val> {
-        let lhs = self.eval(left.clone(), env)?;
-        let rhs = self.eval(right.clone(), env)?;
+        let lhs = self.eval(left.clone(), env)?.kind;
+        let rhs = self.eval(right.clone(), env)?.kind;
 
         let err = InterpreterError::BinaryExpressionUnsupported {
             span,
@@ -394,23 +412,23 @@ impl Interpreter {
             op,
         };
 
-        let result: Val = match (lhs, rhs) {
+        let result: ValKind = match (lhs, rhs) {
             // Integer operations
-            (Val::Int(lhs), Val::Int(rhs)) => {
+            (ValKind::Int(lhs), ValKind::Int(rhs)) => {
                 let value = match op {
                     BinaryOp::Add => lhs + rhs,
                     BinaryOp::Sub => lhs - rhs,
                     BinaryOp::Mul => lhs * rhs,
                     BinaryOp::Div => lhs / rhs,
                 };
-                Val::Int(value)
+                ValKind::Int(value)
             }
             // String addition.
             //
             // Example: "foo" + "bar" -> "foobar"
-            (Val::Str(lhs), Val::Str(rhs)) => {
+            (ValKind::Str(lhs), ValKind::Str(rhs)) => {
                 if op == BinaryOp::Add {
-                    Val::Str(format!("{lhs}{rhs}"))
+                    ValKind::Str(format!("{lhs}{rhs}"))
                 } else {
                     return Err(err.into());
                 }
@@ -418,18 +436,18 @@ impl Interpreter {
             // String repeating. Integers less than one are not valid.
             //
             // Example: "foo" * 2 -> "foofoo".
-            (Val::Str(lhs), Val::Int(rhs)) => {
+            (ValKind::Str(lhs), ValKind::Int(rhs)) => {
                 if op == BinaryOp::Mul && rhs >= 0 {
                     // Since `rhs` is positive, no need to worry about casting
-                    Val::Str(lhs.repeat(rhs as usize))
+                    ValKind::Str(lhs.repeat(rhs as usize))
                 } else {
                     return Err(err.into());
                 }
             }
-            (Val::Int(lhs), Val::Str(rhs)) => {
+            (ValKind::Int(lhs), ValKind::Str(rhs)) => {
                 if op == BinaryOp::Mul && lhs >= 0 {
                     // Since `lhs` is positive, no need to worry about casting
-                    Val::Str(rhs.repeat(lhs as usize))
+                    ValKind::Str(rhs.repeat(lhs as usize))
                 } else {
                     return Err(err.into());
                 }
@@ -437,7 +455,7 @@ impl Interpreter {
             _ => return Err(err.into()),
         };
 
-        Ok(result)
+        Ok(result.into())
     }
 
     fn eval_ident(&self, ident: &Ident, env: &Arc<Mutex<Env>>, span: SourceSpan) -> Result<Val> {

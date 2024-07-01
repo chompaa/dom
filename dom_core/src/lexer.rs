@@ -63,6 +63,8 @@ pub enum TokenKind {
     RightParen,
     LeftBrace,
     RightBrace,
+    LeftBracket,
+    RightBracket,
 
     // Misc
     EndOfLine,
@@ -270,6 +272,8 @@ impl Lexer {
             ')' => TokenKind::RightParen,
             '{' => TokenKind::LeftBrace,
             '}' => TokenKind::RightBrace,
+            '[' => TokenKind::LeftBracket,
+            ']' => TokenKind::RightBracket,
             '\n' => TokenKind::EndOfLine,
             '"' => TokenKind::Str(self.read_str()?),
             _ => {

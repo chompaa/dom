@@ -1,4 +1,4 @@
-use dom_core::{declare_native_func, std, Env, Interpreter, Parser, Val};
+use dom_core::{declare_native_func, std, Env, Interpreter, Parser, Val, ValKind};
 
 use ::std::{
     fs::read_to_string,
@@ -30,6 +30,11 @@ fn main() -> Result<()> {
     // Set up native functions
     declare_native_func!(env, std::print);
     declare_native_func!(env, std::input);
+    declare_native_func!(env, std::get);
+    declare_native_func!(env, std::set);
+    declare_native_func!(env, std::push);
+    declare_native_func!(env, std::del);
+    declare_native_func!(env, std::len);
 
     match args.path {
         // File mode
