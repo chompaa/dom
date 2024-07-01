@@ -71,9 +71,7 @@ pub fn set(args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
     let index = index.to_wrapped_index(list.len());
     list[index] = value.clone();
 
-    env.lock()
-        .unwrap()
-        .declare_unchecked(ident.to_string(), ValKind::List(list).into());
+    Env::assign_unchecked(env, ident.to_string(), ValKind::List(list).into());
 
     None
 }
@@ -91,9 +89,7 @@ pub fn push(args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
     let mut list = list.clone();
     list.push(value.clone());
 
-    env.lock()
-        .unwrap()
-        .declare_unchecked(ident.to_string(), ValKind::List(list).into());
+    Env::assign_unchecked(env, ident.to_string(), ValKind::List(list).into());
 
     None
 }
@@ -115,9 +111,7 @@ pub fn del(args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
     let index = index.to_wrapped_index(list.len());
     list.remove(index);
 
-    env.lock()
-        .unwrap()
-        .declare_unchecked(ident.to_string(), ValKind::List(list).into());
+    Env::assign_unchecked(env, ident.to_string(), ValKind::List(list).into());
 
     None
 }

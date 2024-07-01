@@ -216,6 +216,15 @@ impl Env {
         Ok(value.with_ident(name))
     }
 
+    /// Assigns a new value to the variable with the given name. Does not perform error
+    /// checking.
+    pub fn assign_unchecked(env: &Arc<Mutex<Self>>, name: String, value: Val) {
+        // Find the environment where the variable is declared.
+        let env = Self::resolve(env, &name, (0, 0).into()).unwrap();
+
+        env.lock().unwrap().values.insert(name, value);
+    }
+
     /// Looks up the value of the variable with the given name.
     ///
     /// Returns an error if no variable with the given name exists in this environment or its parents.
