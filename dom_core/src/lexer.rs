@@ -67,6 +67,7 @@ pub enum TokenKind {
     RightBracket,
 
     // Misc
+    RightArrow,
     EndOfLine,
     EndOfFile,
 }
@@ -274,6 +275,13 @@ impl Lexer {
             '}' => TokenKind::RightBrace,
             '[' => TokenKind::LeftBracket,
             ']' => TokenKind::RightBracket,
+            '~' => match self.peek_char() {
+                '>' => {
+                    self.read_char();
+                    TokenKind::RightArrow
+                }
+                _ => return Err(LexerError::InvalidTokenKind(self.ch).into()),
+            },
             '\n' => TokenKind::EndOfLine,
             '"' => TokenKind::Str(self.read_str()?),
             _ => {

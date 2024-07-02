@@ -9,6 +9,7 @@
 //! - Binary Multiplication
 //! - Unary Operators
 //! - Function Call
+//! - Lists
 //! - Primary Expressions
 
 use std::collections::VecDeque;
@@ -559,33 +560,12 @@ impl Parser {
                     span: span.into(),
                 })
             }
-            _ => self.parse_list_expr(),
+            _ => self.parse_call_expr(),
         }
-    }
-
-    fn parse_list_expr(&mut self) -> Result<Expr> {
-        if self.peek_kind() != Some(&TokenKind::LeftBracket) {
-            return self.parse_call_expr();
-        }
-
-        let left = self.consume();
-
-        let (items, last) = self.parse_args(&TokenKind::RightBracket)?;
-        let last = last.unwrap_or(left.span.offset());
-
-        let span = (left.span.offset(), last - left.span.offset()).into();
-
-        self.expect(&TokenKind::RightBracket, ParserError::ListItemsEnd { span })?;
-
-        Ok(Expr {
-            kind: ExprKind::List { items },
-            // `span` doesn't include the end `RightBracket`
-            span: (span.offset(), span.len() + 1).into(),
-        })
     }
 
     fn parse_call_expr(&mut self) -> Result<Expr> {
-        let mut left = self.parse_primary_expr()?;
+        let mut left = self.parse_list_expr()?;
 
         if self.peek_kind() == Some(&TokenKind::LeftParen) {
             self.consume();
@@ -610,6 +590,27 @@ impl Parser {
         }
 
         Ok(left)
+    }
+
+    fn parse_list_expr(&mut self) -> Result<Expr> {
+        if self.peek_kind() != Some(&TokenKind::LeftBracket) {
+            return self.parse_primary_expr();
+        }
+
+        let left = self.consume();
+
+        let (items, last) = self.parse_args(&TokenKind::RightBracket)?;
+        let last = last.unwrap_or(left.span.offset());
+
+        let span = (left.span.offset(), last - left.span.offset()).into();
+
+        self.expect(&TokenKind::RightBracket, ParserError::ListItemsEnd { span })?;
+
+        Ok(Expr {
+            kind: ExprKind::List { items },
+            // `span` doesn't include the end `RightBracket`
+            span: (span.offset(), span.len() + 1).into(),
+        })
     }
 
     fn parse_primary_expr(&mut self) -> Result<Expr> {
