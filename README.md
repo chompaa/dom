@@ -147,8 +147,10 @@ Dom has support for pipes, which let you pass the result of one function onto th
 ```elixir
 ["foo"]
 |> push("bar")
-|> print() // ["foo", "bar"]
+|> print()
 ```
+
+will output `["foo", "bar"]`.
 
 Dom also contains some built-in functions, which can be seen below:
 
