@@ -57,7 +57,7 @@ pub fn get(args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
 #[must_use]
 pub fn set(args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
     let [Val {
-        ident: Some(ident),
+        ident,
         kind: ValKind::List(list),
     }, Val {
         kind: ValKind::Int(index),
@@ -71,15 +71,17 @@ pub fn set(args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
     let index = index.to_wrapped_index(list.len());
     list[index] = value.clone();
 
-    Env::assign_unchecked(env, ident.to_string(), ValKind::List(list).into());
+    let Some(ident) = ident else {
+        return Some(list.into());
+    };
 
-    None
+    Some(Env::assign_unchecked(env, ident.to_string(), list.into()))
 }
 
 #[must_use]
 pub fn push(args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
     let [Val {
-        ident: Some(ident),
+        ident,
         kind: ValKind::List(list),
     }, value] = &args[..2]
     else {
@@ -89,15 +91,17 @@ pub fn push(args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
     let mut list = list.clone();
     list.push(value.clone());
 
-    Env::assign_unchecked(env, ident.to_string(), ValKind::List(list).into());
+    let Some(ident) = ident else {
+        return Some(list.into());
+    };
 
-    None
+    Some(Env::assign_unchecked(env, ident.to_string(), list.into()))
 }
 
 #[must_use]
-pub fn del(args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
+pub fn pop(args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
     let [Val {
-        ident: Some(ident),
+        ident,
         kind: ValKind::List(list),
     }, Val {
         kind: ValKind::Int(index),
@@ -111,9 +115,11 @@ pub fn del(args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
     let index = index.to_wrapped_index(list.len());
     list.remove(index);
 
-    Env::assign_unchecked(env, ident.to_string(), ValKind::List(list).into());
+    let Some(ident) = ident else {
+        return Some(list.into());
+    };
 
-    None
+    Some(Env::assign_unchecked(env, ident.to_string(), list.into()))
 }
 
 #[must_use]

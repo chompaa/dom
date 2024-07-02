@@ -32,7 +32,7 @@ pub fn interpret(source: &str) -> String {
     declare_native_func!(env, std::get);
     declare_native_func!(env, std::set);
     declare_native_func!(env, std::push);
-    declare_native_func!(env, std::del);
+    declare_native_func!(env, std::pop);
     declare_native_func!(env, std::len);
 
     let (ast, program) = match Parser::new(source.to_string()).produce_ast() {

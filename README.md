@@ -122,7 +122,7 @@ let list = [0, "foo", 1, "bar"]
 print(get(list, 1)) // "foo"
 ```
 
-There are built-in functions for working with lists: `get`, `set`, `push`, `del`, and `len`.
+There are built-in functions for working with lists: `get`, `set`, `push`, `pop`, and `len`.
 
 ### Functions
 
@@ -142,9 +142,18 @@ sum(1, 1)
 
 Arguments are always passed by value, for now.
 
+Dom has support for pipes, which let you pass the result of one function onto the next. For example:
+
+```elixir
+["foo"]
+|> push("bar")
+|> print() // ["foo", "bar"]
+```
+
 Dom also contains some built-in functions, which can be seen below:
 
-![NOTE]: These functions don't produce errors right now, i.e. for incorrect arguments or runtime errors.
+> [!NOTE]
+> These functions don't produce errors right now, i.e. for incorrect arguments or runtime errors.
 
 | Function | Arguments | Description |
 | --- | --- | --- |
@@ -153,7 +162,7 @@ Dom also contains some built-in functions, which can be seen below:
 | `get` | `List, Int` | Gets an item at a specified index from a `List` 
 | `set` | `List, Int, Any` | Sets an item at a specified index in a `List` 
 | `push` | `List, Any` | Pushes an item to the end of a `List` 
-| `del` | `List, Int` | Deletes an item at a specified index in a `List` 
+| `pop` | `List, Int` | Pops an item at a specified index in a `List` 
 | `len` | `List, Int` | Returns the length of a `List` 
 
 

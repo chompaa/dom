@@ -116,6 +116,10 @@ pub enum ExprKind {
         /// The value (right-hand side) of the assignment.
         value: Box<Expr>,
     },
+    Pipe {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
     Call {
         caller: Box<Expr>,
         args: Vec<Expr>,
@@ -180,6 +184,7 @@ impl fmt::Display for ExprKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ExprKind::Assignment { .. } => write!(f, "Assignment"),
+            ExprKind::Pipe { .. } => write!(f, "Pipe"),
             ExprKind::Call { .. } => write!(f, "Call"),
             ExprKind::List { .. } => write!(f, "List"),
             ExprKind::Str { .. } => write!(f, "Str"),

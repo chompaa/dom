@@ -111,7 +111,6 @@ pub enum ParserError {
 
 enum Process {
     Break,
-    Consume,
     Push,
 }
 
@@ -140,10 +139,7 @@ impl Parser {
         self.tokens = Lexer::new(self.src.clone()).tokenize()?.into();
 
         // Build out the program body
-        let body = self.process(|token| match token {
-            TokenKind::EndOfLine => Process::Consume,
-            _ => Process::Push,
-        })?;
+        let body = self.process(|_| Process::Push)?;
 
         // Return the program
         let program = Stmt::Program { body };
@@ -159,9 +155,6 @@ impl Parser {
         while let Some(token) = &self.tokens.front() {
             match p(&token.kind) {
                 Process::Break => break,
-                Process::Consume => {
-                    self.consume();
-                }
                 Process::Push => {
                     body.push(self.parse_stmt()?);
                 }
@@ -222,7 +215,6 @@ impl Parser {
 
         let body = self.process(|token| match token {
             TokenKind::RightBrace => Process::Break,
-            TokenKind::EndOfLine => Process::Consume,
             _ => Process::Push,
         })?;
 
@@ -266,7 +258,6 @@ impl Parser {
 
         let body = self.process(|token| match token {
             TokenKind::RightBrace => Process::Break,
-            TokenKind::EndOfLine => Process::Consume,
             _ => Process::Push,
         })?;
 
@@ -293,7 +284,7 @@ impl Parser {
         let mut last;
         loop {
             // First argument won't be preceded by a separator
-            let arg = self.parse_assignment_expr()?;
+            let arg = self.parse_expr()?;
             last = Some(arg.span.offset() + arg.span.len());
             args.push(arg);
 
@@ -319,7 +310,6 @@ impl Parser {
 
         let body = self.process(|token| match token {
             TokenKind::RightBrace => Process::Break,
-            TokenKind::EndOfLine => Process::Consume,
             _ => Process::Push,
         })?;
 
@@ -368,12 +358,12 @@ impl Parser {
     }
 
     fn parse_assignment_expr(&mut self) -> Result<Expr> {
-        let mut left = self.parse_logical_or_expr()?;
+        let mut left = self.parse_pipe_expr()?;
 
         if self.peek_kind() == Some(&TokenKind::Assignment) {
             self.consume();
 
-            let right = self.parse_logical_or_expr()?;
+            let right = self.parse_pipe_expr()?;
             let span = (
                 left.span.offset(),
                 (right.span.offset() - left.span.offset()) + right.span.len(),
@@ -383,6 +373,31 @@ impl Parser {
                 kind: ExprKind::Assignment {
                     assignee: Box::new(left),
                     value: Box::new(right),
+                },
+                span: span.into(),
+            }
+        }
+
+        Ok(left)
+    }
+
+    fn parse_pipe_expr(&mut self) -> Result<Expr> {
+        let mut left = self.parse_logical_or_expr()?;
+
+        while let Some(&TokenKind::Pipe) = self.peek_kind() {
+            // Consume the operator
+            self.consume();
+
+            let right = self.parse_logical_or_expr()?;
+            let span = (
+                left.span.offset(),
+                (right.span.offset() - left.span.offset()) + right.span.len(),
+            );
+
+            left = Expr {
+                kind: ExprKind::Pipe {
+                    left: Box::new(left),
+                    right: Box::new(right),
                 },
                 span: span.into(),
             }
@@ -651,7 +666,7 @@ impl Parser {
                 expr
             }
             TokenKind::Return => {
-                let (value, len) = if let Some(TokenKind::EndOfLine) = self.peek_kind() {
+                let (value, len) = if let Some(TokenKind::RightBrace) = self.peek_kind() {
                     (None, 0)
                 } else {
                     let expr = self.parse_expr()?;

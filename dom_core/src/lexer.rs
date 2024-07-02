@@ -67,7 +67,7 @@ pub enum TokenKind {
     RightBracket,
 
     // Misc
-    RightArrow,
+    Pipe,
     EndOfLine,
     EndOfFile,
 }
@@ -228,6 +228,10 @@ impl Lexer {
                     self.read_char();
                     TokenKind::Or
                 }
+                '>' => {
+                    self.read_char();
+                    TokenKind::Pipe
+                }
                 _ => return Err(LexerError::InvalidTokenKind(self.ch).into()),
             },
             '+' => TokenKind::Plus,
@@ -261,13 +265,6 @@ impl Lexer {
                 }
                 _ => TokenKind::RelOp(RelOp::Less),
             },
-            '>' => match self.peek_char() {
-                '=' => {
-                    self.read_char();
-                    TokenKind::RelOp(RelOp::GreaterEq)
-                }
-                _ => TokenKind::RelOp(RelOp::Greater),
-            },
             ',' => TokenKind::Separator,
             '(' => TokenKind::LeftParen,
             ')' => TokenKind::RightParen,
@@ -275,13 +272,6 @@ impl Lexer {
             '}' => TokenKind::RightBrace,
             '[' => TokenKind::LeftBracket,
             ']' => TokenKind::RightBracket,
-            '~' => match self.peek_char() {
-                '>' => {
-                    self.read_char();
-                    TokenKind::RightArrow
-                }
-                _ => return Err(LexerError::InvalidTokenKind(self.ch).into()),
-            },
             '\n' => TokenKind::EndOfLine,
             '"' => TokenKind::Str(self.read_str()?),
             _ => {
@@ -310,6 +300,11 @@ impl Lexer {
         };
 
         self.read_char();
+
+        if kind == TokenKind::EndOfLine {
+            return self.next();
+        }
+
         let span = SourceSpan::new((start - 1).into(), self.cursor - start);
         let token = Token { kind, span };
         Ok(token)

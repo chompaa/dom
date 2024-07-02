@@ -54,8 +54,14 @@ pub enum InterpreterError {
     },
     #[error("caller is not a defined function")]
     #[diagnostic(code(interpreter::caller_not_defined))]
-    InvalidCaller {
+    CallerNotDefined {
         #[label("this is not a function")]
+        span: SourceSpan,
+    },
+    #[error("right-hand-side of pipe expression is not a function call")]
+    #[diagnostic(code(interpreter::invalid_pipe_caller))]
+    InvalidPipeCaller {
+        #[label("this is not a function call")]
         span: SourceSpan,
     },
     #[error("caller arguments do not match function arguments")]
@@ -110,6 +116,7 @@ impl Interpreter {
                     ExprKind::Assignment { assignee, value } => {
                         self.eval_assign(*assignee, *value, env)
                     }
+                    ExprKind::Pipe { left, right } => self.eval_pipe_expr(*left, *right, env),
                     ExprKind::Call { caller, args } => self.eval_call(*caller, args, env, span),
                     ExprKind::List { items } => self.eval_list_expr(items, env),
                     ExprKind::LogicOp { left, right, op } => {
@@ -225,6 +232,16 @@ impl Interpreter {
         Ok(result)
     }
 
+    fn eval_pipe_expr(&self, left: Expr, right: Expr, env: &Arc<Mutex<Env>>) -> Result<Val> {
+        let ExprKind::Call { caller, mut args } = right.kind else {
+            return Err(InterpreterError::InvalidPipeCaller { span: right.span }.into());
+        };
+
+        args.insert(0, left);
+
+        self.eval_call(*caller, args, env, right.span)
+    }
+
     fn eval_call(
         &self,
         caller: Expr,
@@ -280,7 +297,7 @@ impl Interpreter {
                     None => Ok(Val::NONE),
                 }
             }
-            _ => Err(InterpreterError::InvalidCaller { span: caller_span }.into()),
+            _ => Err(InterpreterError::CallerNotDefined { span: caller_span }.into()),
         }
     }
 

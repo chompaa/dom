@@ -112,6 +112,12 @@ pub enum ValKind {
     List(Vec<Val>),
 }
 
+impl From<Vec<Val>> for Val {
+    fn from(value: Vec<Val>) -> Self {
+        ValKind::List(value).into()
+    }
+}
+
 impl std::fmt::Display for Val {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match &self.kind {
@@ -183,9 +189,10 @@ impl Env {
             return Err(EnvError::IdentifierAlreadyExists { span }.into());
         }
 
-        self.values.insert(name.clone(), value.clone());
+        self.values
+            .insert(name.clone(), value.with_ident(name.clone()));
 
-        Ok(value.with_ident(name))
+        Ok(self.values[&name].clone())
     }
 
     /// Declares a new variable with the given name and value, overwritting any variable that
@@ -207,22 +214,23 @@ impl Env {
     ) -> Result<Val> {
         // Find the environment where the variable is declared.
         let env = Self::resolve(env, &name, span)?;
+        let values = &mut env.lock().unwrap().values;
 
-        env.lock()
-            .unwrap()
-            .values
-            .insert(name.clone(), value.clone());
+        values.insert(name.clone(), value);
 
-        Ok(value.with_ident(name))
+        Ok(values[&name].clone())
     }
 
     /// Assigns a new value to the variable with the given name. Does not perform error
     /// checking.
-    pub fn assign_unchecked(env: &Arc<Mutex<Self>>, name: String, value: Val) {
+    pub fn assign_unchecked(env: &Arc<Mutex<Self>>, name: String, value: Val) -> Val {
         // Find the environment where the variable is declared.
         let env = Self::resolve(env, &name, (0, 0).into()).unwrap();
+        let values = &mut env.lock().unwrap().values;
 
-        env.lock().unwrap().values.insert(name, value);
+        values.insert(name.clone(), value);
+
+        values[&name].clone()
     }
 
     /// Looks up the value of the variable with the given name.
@@ -237,7 +245,7 @@ impl Env {
             .expect("variable should have a value")
             .clone();
 
-        Ok(value.with_ident(name.to_string()))
+        Ok(value)
     }
 
     /// Resolves the environment that contains the variable with the given name.
