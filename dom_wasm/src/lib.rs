@@ -1,3 +1,4 @@
+mod evaluators;
 mod std;
 
 use dom_core::{declare_native_func, Env, Interpreter, Parser, ValKind};
@@ -44,7 +45,8 @@ pub fn interpret(source: &str) -> String {
         }
     };
 
-    if let Err(error) = Interpreter::new().eval(program, &env) {
+    let module_evaluator = Box::new(evaluators::WasmUseEvaluator);
+    if let Err(error) = Interpreter::new(module_evaluator).eval(program, &env) {
         let error = error.with_source_code(source.to_string());
         console::log_1(&format!("{error:?}").into());
     }

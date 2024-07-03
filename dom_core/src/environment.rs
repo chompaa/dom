@@ -110,6 +110,7 @@ pub enum ValKind {
     /// Built-in function.
     NativeFunc(Box<dyn CloneableFn + Send + Sync>),
     List(Vec<Val>),
+    Mod(Arc<Mutex<Env>>),
 }
 
 impl From<Vec<Val>> for Val {
@@ -139,6 +140,7 @@ impl std::fmt::Display for Val {
                 }
                 write!(f, "]")
             }
+            ValKind::Mod(_) => write!(f, "{}", self.ident.as_ref().unwrap()),
         }
     }
 }

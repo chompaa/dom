@@ -66,6 +66,10 @@ pub enum TokenKind {
     LeftBracket,
     RightBracket,
 
+    // Modules
+    Use,
+    Dot,
+
     // Misc
     Pipe,
     EndOfLine,
@@ -272,6 +276,7 @@ impl Lexer {
             '}' => TokenKind::RightBrace,
             '[' => TokenKind::LeftBracket,
             ']' => TokenKind::RightBracket,
+            '.' => TokenKind::Dot,
             '\n' => TokenKind::EndOfLine,
             '"' => TokenKind::Str(self.read_str()?),
             _ => {
@@ -287,6 +292,7 @@ impl Lexer {
                         "loop" => TokenKind::Loop,
                         "continue" => TokenKind::Continue,
                         "break" => TokenKind::Break,
+                        "use" => TokenKind::Use,
                         // Misc
                         "true" | "false" => TokenKind::Bool(ident),
                         _ => TokenKind::Ident(ident),

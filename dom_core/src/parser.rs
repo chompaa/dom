@@ -17,7 +17,9 @@ use std::collections::VecDeque;
 use miette::{Diagnostic, Result, SourceSpan};
 use thiserror::Error;
 
-use crate::ast::{BinaryOp, Cond, Expr, ExprKind, Func, Ident, LogicOp, Loop, Stmt, UnaryOp, Var};
+use crate::ast::{
+    BinaryOp, Cond, Expr, ExprKind, Func, Ident, LogicOp, Loop, Stmt, UnaryOp, Use, Var,
+};
 use crate::lexer::{Lexer, Token, TokenKind};
 
 #[derive(Error, Diagnostic, Debug)]
@@ -98,6 +100,15 @@ pub enum ParserError {
     #[diagnostic(code(parser::loop_block_end))]
     LoopBlockEnd {
         #[label("this loop is missing a `}}` to end its body")]
+        span: SourceSpan,
+    },
+    #[error("unexpected token in import")]
+    #[diagnostic(
+        code(parser::use_non_ident),
+        help("module names should only contain alphabetical chars and `_`")
+    )]
+    UseNonIdent {
+        #[label("this token is not supported as a module name")]
         span: SourceSpan,
     },
     #[error("token `{kind:?}` is unsupported")]
@@ -201,10 +212,48 @@ impl Parser {
             TokenKind::Cond => Stmt::Cond(self.parse_cond()?),
             TokenKind::Func => Stmt::Func(self.parse_func()?),
             TokenKind::Loop => Stmt::Loop(self.parse_loop()?),
+            TokenKind::Use => Stmt::Use(self.parse_use()?),
             _ => Stmt::Expr(self.parse_expr()?),
         };
 
         Ok(stmt)
+    }
+
+    fn parse_use(&mut self) -> Result<Use> {
+        // Consume the `use` keyword
+        let mut span = self.consume().span;
+
+        let mut path = String::new();
+
+        loop {
+            let token = self.consume();
+            let token_span = token.span;
+
+            // First import won't be preceded by a separator
+            let Token {
+                kind: TokenKind::Ident(ident),
+                ..
+            } = token
+            else {
+                return Err(ParserError::UseNonIdent { span: token_span }.into());
+            };
+
+            path.push_str(&format!("/{ident}"));
+            span = (
+                span.offset() + token_span.offset(),
+                token_span.offset() - span.offset(),
+            )
+                .into();
+
+            // Subsequent arguments will be
+            if self.peek_kind() == Some(&TokenKind::Dot) {
+                self.consume();
+            } else {
+                break;
+            }
+        }
+
+        Ok(Use { path })
     }
 
     fn parse_loop(&mut self) -> Result<Loop> {
@@ -575,8 +624,32 @@ impl Parser {
                     span: span.into(),
                 })
             }
-            _ => self.parse_call_expr(),
+            _ => self.parse_mod_expr(),
         }
+    }
+
+    fn parse_mod_expr(&mut self) -> Result<Expr> {
+        let mut left = self.parse_call_expr()?;
+
+        if self.peek_kind() == Some(&TokenKind::Dot) {
+            self.consume();
+
+            let right = self.parse_mod_expr()?;
+            let span = (
+                left.span.offset(),
+                (right.span.offset() - left.span.offset()) + right.span.len(),
+            );
+
+            left = Expr {
+                kind: ExprKind::Mod {
+                    module: Box::new(left),
+                    item: Box::new(right),
+                },
+                span: span.into(),
+            }
+        }
+
+        Ok(left)
     }
 
     fn parse_call_expr(&mut self) -> Result<Expr> {

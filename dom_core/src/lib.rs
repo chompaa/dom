@@ -8,7 +8,7 @@ mod util;
 
 pub use ast::Expr;
 pub use environment::{Env, Val, ValKind};
-pub use interpreter::Interpreter;
+pub use interpreter::{Interpreter, UseEvaluator};
 pub use parser::Parser;
 
 #[macro_export]

@@ -22,6 +22,8 @@ pub enum Stmt {
     Var(Var),
     /// An expression statement.
     Expr(Expr),
+    /// A use statement for modules.
+    Use(Use),
 }
 
 impl From<Expr> for Stmt {
@@ -178,6 +180,13 @@ pub enum ExprKind {
     Continue,
     /// A break expression for loops.
     Break,
+    /// A module access expression.
+    Mod {
+        /// The module being accessed.
+        module: Box<Expr>,
+        /// The item in the module.
+        item: Box<Expr>,
+    },
 }
 
 impl fmt::Display for ExprKind {
@@ -198,6 +207,12 @@ impl fmt::Display for ExprKind {
             ExprKind::Return { .. } => write!(f, "Return"),
             ExprKind::Continue => write!(f, "Continue"),
             ExprKind::Break => write!(f, "Break"),
+            ExprKind::Mod { .. } => write!(f, "Mod"),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Use {
+    pub path: String,
 }

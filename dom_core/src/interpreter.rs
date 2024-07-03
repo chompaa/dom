@@ -4,7 +4,7 @@ use miette::{Diagnostic, Result, SourceSpan};
 use thiserror::Error;
 
 use crate::{
-    ast::{BinaryOp, Cond, Expr, ExprKind, Func, Ident, LogicOp, Loop, Stmt, UnaryOp, Var},
+    ast::{BinaryOp, Cond, Expr, ExprKind, Func, Ident, LogicOp, Loop, Stmt, UnaryOp, Use, Var},
     environment::{Env, Val, ValKind},
     lexer::RelOp,
 };
@@ -70,6 +70,12 @@ pub enum InterpreterError {
         #[label("this call has incorrect argument count")]
         span: SourceSpan,
     },
+    #[error("expression is not a valid module")]
+    #[diagnostic(code(interpreter::mismatched_args))]
+    InvalidModule {
+        #[label("this expression is not a module")]
+        span: SourceSpan,
+    },
 }
 
 #[derive(Error, Diagnostic, Debug)]
@@ -82,17 +88,22 @@ pub enum Exception {
     Return(Option<Box<Expr>>),
 }
 
-pub struct Interpreter;
+pub trait UseEvaluator {
+    fn eval_use(
+        &self,
+        interpreter: &Interpreter,
+        path: String,
+        env: &Arc<Mutex<Env>>,
+    ) -> Result<()>;
+}
 
-impl Default for Interpreter {
-    fn default() -> Self {
-        Self::new()
-    }
+pub struct Interpreter {
+    use_evaluator: Box<dyn UseEvaluator>,
 }
 
 impl Interpreter {
-    pub fn new() -> Self {
-        Self
+    pub fn new(use_evaluator: Box<dyn UseEvaluator>) -> Self {
+        Self { use_evaluator }
     }
 
     pub fn eval(&self, statement: impl Into<Stmt>, env: &Arc<Mutex<Env>>) -> Result<Val> {
@@ -136,8 +147,10 @@ impl Interpreter {
                     ExprKind::Return { value } => Err(Exception::Return(value).into()),
                     ExprKind::Continue => Err(Exception::Continue.into()),
                     ExprKind::Break => Err(Exception::Break.into()),
+                    ExprKind::Mod { module, item } => self.eval_mod_expr(*module, *item, env),
                 }
             }
+            Stmt::Use(Use { path }) => self.eval_use(path, env),
         }
     }
 
@@ -478,5 +491,24 @@ impl Interpreter {
     fn eval_ident(&self, ident: &Ident, env: &Arc<Mutex<Env>>, span: SourceSpan) -> Result<Val> {
         let val = Env::lookup(env, ident, span)?;
         Ok(val)
+    }
+
+    fn eval_mod_expr(&self, module: Expr, item: Expr, env: &Arc<Mutex<Env>>) -> Result<Val> {
+        let span = module.span;
+
+        let Val {
+            kind: ValKind::Mod(mod_env),
+            ..
+        } = self.eval(module, env)?
+        else {
+            return Err(InterpreterError::InvalidModule { span }.into());
+        };
+
+        self.eval(item, &mod_env)
+    }
+
+    fn eval_use(&self, path: String, env: &Arc<Mutex<Env>>) -> Result<Val> {
+        self.use_evaluator.eval_use(self, path, env)?;
+        Ok(Val::NONE)
     }
 }

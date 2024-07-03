@@ -1,3 +1,5 @@
+mod evaluators;
+
 use dom_core::{declare_native_func, std, Env, Interpreter, Parser, Val, ValKind};
 
 use ::std::{
@@ -17,7 +19,8 @@ struct Args {
 fn result(source: &str, env: &Arc<Mutex<Env>>) -> Result<Val> {
     (|| -> Result<Val> {
         let program = Parser::new(source.to_string()).produce_ast()?;
-        Interpreter::new().eval(program, env)
+        let module_evaluator = Box::new(evaluators::CliUseEvaluator);
+        Interpreter::new(module_evaluator).eval(program, env)
     })()
     .map_err(|error| error.with_source_code(source.to_string()))
 }
