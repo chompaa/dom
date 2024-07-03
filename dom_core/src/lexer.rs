@@ -269,6 +269,13 @@ impl Lexer {
                 }
                 _ => TokenKind::RelOp(RelOp::Less),
             },
+            '>' => match self.peek_char() {
+                '=' => {
+                    self.read_char();
+                    TokenKind::RelOp(RelOp::GreaterEq)
+                }
+                _ => TokenKind::RelOp(RelOp::Greater),
+            },
             ',' => TokenKind::Separator,
             '(' => TokenKind::LeftParen,
             ')' => TokenKind::RightParen,
