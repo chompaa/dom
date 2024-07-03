@@ -26,12 +26,13 @@ impl UseEvaluator for CliUseEvaluator {
         let source = read_to_string(format!(".{}.dom", &path)).unwrap();
 
         let program = Parser::new(source.to_string()).produce_ast()?;
-        let mod_env = Env::new();
+
+        let mut env = env.lock().unwrap();
+        let mod_env = Env::with_builtins(Arc::clone(env.builtins()));
+
         let _ = interpreter.eval(program, &mod_env);
 
-        env.lock()
-            .unwrap()
-            .declare_unchecked(ident.to_string(), ValKind::Mod(mod_env).into());
+        env.declare_unchecked(ident.to_string(), ValKind::Mod(mod_env).into());
 
         Ok(())
     }

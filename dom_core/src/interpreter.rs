@@ -120,7 +120,7 @@ impl Interpreter {
                 ..
             }) => self.eval_func(&ident, params, body, env, span),
             Stmt::Loop(Loop { body, .. }) => self.eval_loop(&body, env),
-            Stmt::Var(Var { ident, value, span }) => self.eval_var(ident, *value, env, span),
+            Stmt::Var(Var { ident, value, span }) => self.eval_var(&ident, *value, env, span),
             Stmt::Expr(expr) => {
                 let Expr { kind, span } = expr;
                 match kind {
@@ -167,7 +167,7 @@ impl Interpreter {
         };
 
         if success {
-            let env = Env::with_parent(Arc::clone(env));
+            let env = Env::with_parent(env);
             let result = self.eval_body(body, &env)?;
             return Ok(result);
         }
@@ -187,19 +187,17 @@ impl Interpreter {
             ident: ident.to_owned(),
             params,
             body,
-            env: Env::with_parent(Arc::clone(env)),
+            env: Env::with_parent(env),
         };
 
-        env.lock()
-            .unwrap()
-            .declare(ident.to_owned(), func.into(), span)
+        env.lock().unwrap().declare(ident, func.into(), span)
     }
 
     fn eval_loop(&self, body: &Vec<Stmt>, env: &Arc<Mutex<Env>>) -> Result<Val> {
         let mut last = None;
 
         'outer: loop {
-            let loop_env = Env::with_parent(Arc::clone(env));
+            let loop_env = Env::with_parent(env);
 
             for stmt in body {
                 let result = self.eval(stmt.clone(), &loop_env);
@@ -223,7 +221,7 @@ impl Interpreter {
 
     fn eval_var(
         &self,
-        ident: Ident,
+        ident: &str,
         value: Stmt,
         env: &Arc<Mutex<Env>>,
         span: SourceSpan,
@@ -241,7 +239,7 @@ impl Interpreter {
         };
 
         let value = self.eval(value, env)?;
-        let result = Env::assign(env, assignee, value, span)?;
+        let result = Env::assign(env, &assignee, value, span)?;
         Ok(result)
     }
 
@@ -269,49 +267,51 @@ impl Interpreter {
 
         let caller_span = caller.span;
 
-        match self.eval(caller, env)?.kind {
-            ValKind::NativeFunc(mut native_func) => match native_func(&args, env) {
-                Some(result) => Ok(result),
-                None => Ok(Val::NONE),
-            },
-            ValKind::Func {
-                params, body, env, ..
-            } => {
-                if args.len() != params.len() {
-                    return Err(InterpreterError::MismatchedArgs { span }.into());
-                }
-
-                for (param, arg) in params.into_iter().zip(args.into_iter()) {
-                    env.lock().unwrap().declare(param, arg, span)?;
-                }
-
-                let mut last = None;
-
-                for stmt in body {
-                    let result = self.eval(stmt, &env);
-
-                    match result {
-                        Ok(result) => last = Some(result),
-                        Err(kind) => match kind.downcast_ref() {
-                            Some(Exception::Return(value)) => {
-                                last = match value {
-                                    Some(value) => Some(self.eval(*value.clone(), &env)?),
-                                    None => None,
-                                };
-                                break;
-                            }
-                            _ => return Err(kind),
-                        },
-                    }
-                }
-
-                match last {
-                    Some(val) => Ok(val),
-                    None => Ok(Val::NONE),
-                }
+        // Check built-in functions first
+        if let ExprKind::Ident(ref ident) = caller.kind {
+            if let Some(builtin) = Env::lookup_builtin(env, ident) {
+                let result = builtin.run(&args, env);
+                return Ok(result.unwrap_or(Val::NONE));
             }
-            _ => Err(InterpreterError::CallerNotDefined { span: caller_span }.into()),
         }
+
+        // Now check for user-defined functions
+        let ValKind::Func {
+            params, body, env, ..
+        } = self.eval(caller, env)?.kind
+        else {
+            return Err(InterpreterError::CallerNotDefined { span: caller_span }.into());
+        };
+
+        if args.len() != params.len() {
+            return Err(InterpreterError::MismatchedArgs { span }.into());
+        }
+
+        for (param, arg) in params.into_iter().zip(args.into_iter()) {
+            env.lock().unwrap().declare(&param, arg, span)?;
+        }
+
+        let mut last = None;
+
+        for stmt in body {
+            let result = self.eval(stmt, &env);
+
+            match result {
+                Ok(result) => last = Some(result),
+                Err(kind) => match kind.downcast_ref() {
+                    Some(Exception::Return(value)) => {
+                        last = match value {
+                            Some(value) => Some(self.eval(*value.clone(), &env)?),
+                            None => None,
+                        };
+                        break;
+                    }
+                    _ => return Err(kind),
+                },
+            }
+        }
+
+        Ok(last.unwrap_or(Val::NONE))
     }
 
     fn eval_list_expr(&self, items: Vec<Expr>, env: &Arc<Mutex<Env>>) -> Result<Val> {

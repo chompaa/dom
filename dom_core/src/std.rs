@@ -1,140 +1,195 @@
 use crate::{
-    environment::{Val, ValKind},
+    environment::{BuiltinFn, Val, ValKind},
     Env,
 };
 
 use ::std::{
-    fmt::Write as _,
     io::{self, Write},
     sync::{Arc, Mutex},
 };
 
-#[must_use]
-pub fn print(args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
-    let joined = args.iter().fold(String::new(), |mut output, arg| {
-        let _ = write!(output, "{arg} ");
-        output
-    });
+#[derive(Debug, Default)]
+pub struct PrintFn;
 
-    println!("{}", &joined);
+impl BuiltinFn for PrintFn {
+    fn name(&self) -> &str {
+        "print"
+    }
 
-    None
+    fn run(&self, args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
+        let joined = args.iter().fold(String::new(), |mut output, arg| {
+            output.push_str(&format!("{arg}"));
+            output
+        });
+
+        println!("{}", &joined);
+
+        None
+    }
 }
 
-#[must_use]
-pub fn input(_: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
-    io::stdout().flush().unwrap();
+#[derive(Debug, Default)]
+pub struct InputFn;
 
-    // Retrieve input
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .expect("should be able to read line");
+impl BuiltinFn for InputFn {
+    fn name(&self) -> &str {
+        "input"
+    }
 
-    // Remove `\n` from `read_line`
-    let input = input.trim_end_matches('\n').to_string();
+    fn run(&self, _: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
+        io::stdout().flush().unwrap();
 
-    Some(ValKind::Str(input).into())
+        // Retrieve input
+        let mut input = String::new();
+        io::stdin()
+            .read_line(&mut input)
+            .expect("should be able to read line");
+
+        // Remove `\n` from `read_line`
+        let input = input.trim_end_matches('\n').to_string();
+
+        Some(ValKind::Str(input).into())
+    }
 }
 
-#[must_use]
-pub fn get(args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
-    let [Val {
-        kind: ValKind::List(list),
-        ..
-    }, Val {
-        kind: ValKind::Int(index),
-        ..
-    }] = &args[..2]
-    else {
-        return None;
-    };
+#[derive(Debug, Default)]
+pub struct GetFn;
 
-    let index = index.to_wrapped_index(list.len());
-    list.get(index).cloned()
+impl BuiltinFn for GetFn {
+    fn name(&self) -> &str {
+        "get"
+    }
+
+    fn run(&self, args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
+        let [Val {
+            kind: ValKind::List(list),
+            ..
+        }, Val {
+            kind: ValKind::Int(index),
+            ..
+        }] = &args[..2]
+        else {
+            return None;
+        };
+
+        let index = index.to_wrapped_index(list.len());
+        list.get(index).cloned()
+    }
 }
 
-#[must_use]
-pub fn set(args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
-    let [Val {
-        ident,
-        kind: ValKind::List(list),
-    }, Val {
-        kind: ValKind::Int(index),
-        ..
-    }, value] = &args[..3]
-    else {
-        return None;
-    };
+#[derive(Debug, Default)]
+pub struct SetFn;
 
-    let mut list = list.clone();
-    let index = index.to_wrapped_index(list.len());
-    list[index] = value.clone();
+impl BuiltinFn for SetFn {
+    fn name(&self) -> &str {
+        "set"
+    }
 
-    let Some(ident) = ident else {
-        return Some(list.into());
-    };
+    fn run(&self, args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
+        let [Val {
+            ident,
+            kind: ValKind::List(list),
+        }, Val {
+            kind: ValKind::Int(index),
+            ..
+        }, value] = &args[..3]
+        else {
+            return None;
+        };
 
-    Some(Env::assign_unchecked(env, ident.to_string(), list.into()))
+        let mut list = list.clone();
+        let index = index.to_wrapped_index(list.len());
+        list[index] = value.clone();
+
+        let Some(ident) = ident else {
+            return Some(list.into());
+        };
+
+        Some(Env::assign_unchecked(env, ident, list.into()))
+    }
 }
 
-#[must_use]
-pub fn push(args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
-    let [Val {
-        ident,
-        kind: ValKind::List(list),
-    }, value] = &args[..2]
-    else {
-        return None;
-    };
+#[derive(Debug, Default)]
+pub struct PushFn;
 
-    let mut list = list.clone();
-    list.push(value.clone());
+impl BuiltinFn for PushFn {
+    fn name(&self) -> &str {
+        "push"
+    }
 
-    let Some(ident) = ident else {
-        return Some(list.into());
-    };
+    fn run(&self, args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
+        let [Val {
+            ident,
+            kind: ValKind::List(list),
+        }, value] = &args[..2]
+        else {
+            return None;
+        };
 
-    Some(Env::assign_unchecked(env, ident.to_string(), list.into()))
+        let mut list = list.clone();
+        list.push(value.clone());
+
+        let Some(ident) = ident else {
+            return Some(list.into());
+        };
+
+        Some(Env::assign_unchecked(env, ident, list.into()))
+    }
 }
 
-#[must_use]
-pub fn pop(args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
-    let [Val {
-        ident,
-        kind: ValKind::List(list),
-    }, Val {
-        kind: ValKind::Int(index),
-        ..
-    }] = &args[..2]
-    else {
-        return None;
-    };
+#[derive(Debug, Default)]
+pub struct PopFn;
 
-    let mut list = list.clone();
-    let index = index.to_wrapped_index(list.len());
-    list.remove(index);
+impl BuiltinFn for PopFn {
+    fn name(&self) -> &str {
+        "pop"
+    }
 
-    let Some(ident) = ident else {
-        return Some(list.into());
-    };
+    fn run(&self, args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
+        let [Val {
+            ident,
+            kind: ValKind::List(list),
+        }, Val {
+            kind: ValKind::Int(index),
+            ..
+        }] = &args[..2]
+        else {
+            return None;
+        };
 
-    Some(Env::assign_unchecked(env, ident.to_string(), list.into()))
+        let mut list = list.clone();
+        let index = index.to_wrapped_index(list.len());
+        list.remove(index);
+
+        let Some(ident) = ident else {
+            return Some(list.into());
+        };
+
+        Some(Env::assign_unchecked(env, ident, list.into()))
+    }
 }
 
-#[must_use]
-pub fn len(args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
-    let Val {
-        kind: ValKind::List(list),
-        ..
-    } = &args[0]
-    else {
-        return None;
-    };
+#[derive(Debug, Default)]
+pub struct LenFn;
 
-    let len = list.len();
+impl BuiltinFn for LenFn {
+    fn name(&self) -> &str {
+        "len"
+    }
 
-    Some(ValKind::Int(len as i32).into())
+    fn run(&self, args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
+        let Val {
+            kind: ValKind::List(list),
+            ..
+        } = &args[0]
+        else {
+            return None;
+        };
+
+        let len = list.len();
+
+        Some(ValKind::Int(len as i32).into())
+    }
 }
 
 trait Int32Ext {

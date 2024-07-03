@@ -26,36 +26,6 @@ pub enum EnvError {
     },
 }
 
-pub trait CloneableFn: FnMut(&[Val], &Arc<Mutex<Env>>) -> Option<Val> {
-    fn clone_box<'a>(&self) -> Box<dyn CloneableFn + Send + Sync + 'static>
-    where
-        Self: 'a;
-}
-
-impl<F> CloneableFn for F
-where
-    F: Fn(&[Val], &Arc<Mutex<Env>>) -> Option<Val> + Send + Sync + Clone + 'static,
-{
-    fn clone_box<'a>(&self) -> Box<dyn CloneableFn + Send + Sync + 'static>
-    where
-        Self: 'a,
-    {
-        Box::new(self.clone())
-    }
-}
-
-impl Clone for Box<dyn CloneableFn + Send + Sync + 'static> {
-    fn clone(&self) -> Self {
-        (**self).clone_box()
-    }
-}
-
-impl std::fmt::Debug for Box<dyn CloneableFn + Send + Sync + 'static> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "NativeFunc")
-    }
-}
-
 /// Runtime values.
 #[derive(Debug, Clone)]
 pub struct Val {
@@ -79,13 +49,10 @@ impl Val {
         kind: ValKind::None,
     };
 
-    pub fn from_kind(kind: ValKind) -> Self {
-        Self { ident: None, kind }
-    }
-
+    #[must_use]
     pub fn with_ident(mut self, ident: Ident) -> Self {
         self.ident = Some(ident);
-        self.to_owned()
+        self
     }
 }
 
@@ -107,8 +74,6 @@ pub enum ValKind {
         body: Vec<Stmt>,
         env: Arc<Mutex<Env>>,
     },
-    /// Built-in function.
-    NativeFunc(Box<dyn CloneableFn + Send + Sync>),
     List(Vec<Val>),
     Mod(Arc<Mutex<Env>>),
 }
@@ -127,7 +92,6 @@ impl std::fmt::Display for Val {
             ValKind::Int(int) => write!(f, "{int}"),
             ValKind::Str(value) => write!(f, "{value}"),
             ValKind::Func { ident, params, .. } => write!(f, "{ident}({})", params.join(", ")),
-            ValKind::NativeFunc(func) => write!(f, "{func:?}"),
             ValKind::List(items) => {
                 // We shouldn't use `join` here, since we'd need to map every item
                 // using the `format` macro, and then collect
@@ -145,13 +109,40 @@ impl std::fmt::Display for Val {
     }
 }
 
+pub trait BuiltinFn: std::fmt::Debug {
+    fn name(&self) -> &str;
+    fn run(&self, args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val>;
+}
+
+#[derive(Debug, Default)]
+pub struct BuiltinRegistry {
+    functions: HashMap<String, Arc<dyn BuiltinFn + Send + Sync>>,
+}
+
+impl BuiltinRegistry {
+    pub fn new() -> Self {
+        Self {
+            functions: HashMap::new(),
+        }
+    }
+
+    pub fn register(&mut self, func: Arc<dyn BuiltinFn + Send + Sync>) {
+        self.functions.insert(func.name().to_string(), func);
+    }
+
+    pub fn get(&self, name: &str) -> Option<&Arc<dyn BuiltinFn + Send + Sync>> {
+        self.functions.get(name)
+    }
+}
+
 /// An environment for storing and looking up variables.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Env {
     /// The parent environment, if any.
     parent: Option<Arc<Mutex<Env>>>,
     /// The values stored in this environment.
     values: HashMap<String, Val>,
+    builtins: Arc<Mutex<BuiltinRegistry>>,
 }
 
 impl Env {
@@ -163,10 +154,24 @@ impl Env {
 
     /// Creates a new environment with the given parent environment.
     #[must_use]
-    pub fn with_parent(parent: Arc<Mutex<Env>>) -> Arc<Mutex<Self>> {
+    pub fn with_parent(parent: &Arc<Mutex<Env>>) -> Arc<Mutex<Self>> {
+        let env = parent.lock().unwrap();
+        let builtins = env.builtins();
+
         Arc::new(Mutex::new(Self {
-            parent: Some(parent),
+            parent: Some(Arc::clone(parent)),
             values: HashMap::new(),
+            builtins: Arc::clone(builtins),
+        }))
+    }
+
+    /// Creates a new environment with the given built-in functions.
+    #[must_use]
+    pub fn with_builtins(builtins: Arc<Mutex<BuiltinRegistry>>) -> Arc<Mutex<Self>> {
+        Arc::new(Mutex::new(Self {
+            parent: None,
+            values: HashMap::new(),
+            builtins,
         }))
     }
 
@@ -182,19 +187,32 @@ impl Env {
         &mut self.values
     }
 
+    /// Returns a reference to the built-ins stored in this environment.
+    #[must_use]
+    pub fn builtins(&self) -> &Arc<Mutex<BuiltinRegistry>> {
+        &self.builtins
+    }
+
+    pub fn register_builtin<F: BuiltinFn + Send + Sync + Default + 'static>(&self) -> &Self {
+        let builtins = &mut Arc::clone(&self.builtins);
+        builtins.lock().unwrap().register(Arc::new(F::default()));
+        self
+    }
+
     /// Declares a new variable with the given name and value.
     ///
     /// Returns an error if a variable with the same name already exists in this environment.
-    pub fn declare(&mut self, name: String, value: Val, span: SourceSpan) -> Result<Val> {
+    pub fn declare(&mut self, name: &str, value: Val, span: SourceSpan) -> Result<Val> {
         // Check if a variable with the same name already exists in this environment.
-        if self.values.contains_key(&name) {
+        if self.values.contains_key(name) {
             return Err(EnvError::IdentifierAlreadyExists { span }.into());
         }
 
-        self.values
-            .insert(name.clone(), value.with_ident(name.clone()));
+        let value = value.with_ident(name.to_string());
 
-        Ok(self.values[&name].clone())
+        self.values.insert(name.to_string(), value.clone());
+
+        Ok(value)
     }
 
     /// Declares a new variable with the given name and value, overwritting any variable that
@@ -202,37 +220,32 @@ impl Env {
     ///
     /// Does not return anything.
     pub fn declare_unchecked(&mut self, name: String, value: Val) {
-        self.values.insert(name, value.clone());
+        self.values.insert(name, value);
     }
 
     /// Assigns a new value to the variable with the given name.
     ///
     /// Returns an error if no variable with the given name exists in this environment or its parents.
-    pub fn assign(
-        env: &Arc<Mutex<Self>>,
-        name: String,
-        value: Val,
-        span: SourceSpan,
-    ) -> Result<Val> {
+    pub fn assign(env: &Arc<Mutex<Self>>, name: &str, value: Val, span: SourceSpan) -> Result<Val> {
         // Find the environment where the variable is declared.
-        let env = Self::resolve(env, &name, span)?;
+        let env = Self::resolve(env, name, span)?;
         let values = &mut env.lock().unwrap().values;
 
-        values.insert(name.clone(), value);
+        values.insert(name.to_string(), value.clone());
 
-        Ok(values[&name].clone())
+        Ok(value)
     }
 
     /// Assigns a new value to the variable with the given name. Does not perform error
     /// checking.
-    pub fn assign_unchecked(env: &Arc<Mutex<Self>>, name: String, value: Val) -> Val {
+    pub fn assign_unchecked(env: &Arc<Mutex<Self>>, name: &str, value: Val) -> Val {
         // Find the environment where the variable is declared.
-        let env = Self::resolve(env, &name, (0, 0).into()).unwrap();
+        let env = Self::resolve(env, name, (0, 0).into()).unwrap();
         let values = &mut env.lock().unwrap().values;
 
-        values.insert(name.clone(), value);
+        values.insert(name.to_string(), value.clone());
 
-        values[&name].clone()
+        value
     }
 
     /// Looks up the value of the variable with the given name.
@@ -248,6 +261,20 @@ impl Env {
             .clone();
 
         Ok(value)
+    }
+
+    /// Looks up a built-in function.
+    ///
+    /// Returns `None` if no function is found.
+    pub fn lookup_builtin(
+        env: &Arc<Mutex<Self>>,
+        name: &str,
+    ) -> Option<Arc<dyn BuiltinFn + Send + Sync>> {
+        let env = env.lock().unwrap();
+
+        let builtins = env.builtins.lock().unwrap();
+
+        builtins.get(name).map(Arc::clone)
     }
 
     /// Resolves the environment that contains the variable with the given name.

@@ -1,7 +1,9 @@
 mod evaluators;
 mod std;
 
-use dom_core::{declare_native_func, Env, Interpreter, Parser, ValKind};
+use dom_core::{Env, Interpreter, Parser};
+
+use ::std::sync::{Arc, Mutex};
 
 use wasm_bindgen::prelude::*;
 use web_sys::console;
@@ -25,16 +27,22 @@ pub fn init_miette_hook() {
     }));
 }
 
+fn register_builtins(env: &Arc<Mutex<Env>>) {
+    env.lock()
+        .unwrap()
+        .register_builtin::<std::PrintFn>()
+        .register_builtin::<std::InputFn>()
+        .register_builtin::<std::GetFn>()
+        .register_builtin::<std::SetFn>()
+        .register_builtin::<std::PushFn>()
+        .register_builtin::<std::PopFn>()
+        .register_builtin::<std::LenFn>();
+}
+
 #[wasm_bindgen]
 pub fn interpret(source: &str) -> String {
     let env = Env::new();
-
-    declare_native_func!(env, std::print);
-    declare_native_func!(env, std::get);
-    declare_native_func!(env, std::set);
-    declare_native_func!(env, std::push);
-    declare_native_func!(env, std::pop);
-    declare_native_func!(env, std::len);
+    register_builtins(&env);
 
     let (ast, program) = match Parser::new(source.to_string()).produce_ast() {
         Ok(program) => (format!("{program:#?}"), program),

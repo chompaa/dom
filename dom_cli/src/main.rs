@@ -1,6 +1,9 @@
 mod evaluators;
 
-use dom_core::{declare_native_func, std, Env, Interpreter, Parser, Val, ValKind};
+use dom_core::{
+    std::{self},
+    Env, Interpreter, Parser, Val,
+};
 
 use ::std::{
     fs::read_to_string,
@@ -25,19 +28,23 @@ fn result(source: &str, env: &Arc<Mutex<Env>>) -> Result<Val> {
     .map_err(|error| error.with_source_code(source.to_string()))
 }
 
+fn register_builtins(env: &Arc<Mutex<Env>>) {
+    env.lock()
+        .unwrap()
+        .register_builtin::<std::PrintFn>()
+        .register_builtin::<std::InputFn>()
+        .register_builtin::<std::GetFn>()
+        .register_builtin::<std::SetFn>()
+        .register_builtin::<std::PushFn>()
+        .register_builtin::<std::PopFn>()
+        .register_builtin::<std::LenFn>();
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    let env = Arc::new(Mutex::new(Env::default()));
-
-    // Set up native functions
-    declare_native_func!(env, std::print);
-    declare_native_func!(env, std::input);
-    declare_native_func!(env, std::get);
-    declare_native_func!(env, std::set);
-    declare_native_func!(env, std::push);
-    declare_native_func!(env, std::pop);
-    declare_native_func!(env, std::len);
+    let env = Env::new();
+    register_builtins(&env);
 
     match args.path {
         // File mode

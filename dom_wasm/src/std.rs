@@ -1,21 +1,26 @@
-use dom_core::{Env, Val};
-
 pub use dom_core::std::*;
+use dom_core::{BuiltinFn, Env, Val};
 
-use ::std::{
-    fmt::Write as _,
-    sync::{Arc, Mutex},
-};
+use ::std::sync::{Arc, Mutex};
 
 use web_sys::console;
 
-pub fn print(args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
-    let joined = args.iter().fold(String::new(), |mut output, arg| {
-        let _ = write!(output, "{arg} ");
-        output
-    });
+#[derive(Debug, Default)]
+pub struct PrintFn;
 
-    console::log_1(&joined.into());
+impl BuiltinFn for PrintFn {
+    fn name(&self) -> &str {
+        "print"
+    }
 
-    None
+    fn run(&self, args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
+        let joined = args.iter().fold(String::new(), |mut output, arg| {
+            output.push_str(&format!("{arg}"));
+            output
+        });
+
+        console::log_1(&joined.into());
+
+        None
+    }
 }
