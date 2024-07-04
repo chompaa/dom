@@ -43,7 +43,16 @@ show_monotonic_lists(10)`;
 
   const handleEditorWillMount: BeforeMount = (monaco) => {
     monaco.languages.register({ id: "dom" });
-    const keywords = ["if", "let", "fn", "return", "loop", "continue", "break"];
+    const keywords = [
+      "if",
+      "let",
+      "fn",
+      "return",
+      "loop",
+      "continue",
+      "break",
+      "use",
+    ];
 
     monaco.languages.setMonarchTokensProvider("dom", {
       keywords,
@@ -62,6 +71,7 @@ show_monotonic_lists(10)`;
           [/\b\d+\b/, "number"],
           [/".*?"/, "string"],
           [/\/\/.*/, "comment"],
+          [/\|>/, "pipe"],
         ],
       },
     });
@@ -97,12 +107,13 @@ show_monotonic_lists(10)`;
       base: "vs",
       inherit: true,
       rules: [
-        { token: "keyword", foreground: "9d0006", fontStyle: "bold" },
+        { token: "keyword", foreground: "9d0006" },
         { token: "variable", foreground: "3c3836" },
         { token: "number", foreground: "8f3f71" },
         { token: "boolean", foreground: "8f3f71" },
         { token: "string", foreground: "79740e" },
         { token: "comment", foreground: "928374" },
+        { token: "pipe", foreground: "427b58" },
       ],
       colors: {
         "editor.foreground": "#3c3836",
