@@ -70,6 +70,12 @@ pub enum InterpreterError {
         #[label("this call has incorrect argument count")]
         span: SourceSpan,
     },
+    #[error("module not found")]
+    #[diagnostic(code(interpreter::mismatched_args))]
+    ModuleNotFound {
+        #[label("this module could not be found")]
+        span: SourceSpan,
+    },
     #[error("expression is not a valid module")]
     #[diagnostic(code(interpreter::mismatched_args))]
     InvalidModule {
@@ -94,6 +100,7 @@ pub trait UseEvaluator {
         interpreter: &Interpreter,
         path: String,
         env: &Arc<Mutex<Env>>,
+        span: SourceSpan,
     ) -> Result<()>;
 }
 
@@ -150,15 +157,16 @@ impl Interpreter {
                     ExprKind::Mod { module, item } => self.eval_mod_expr(*module, *item, env),
                 }
             }
-            Stmt::Use(Use { path }) => self.eval_use(path, env),
+            Stmt::Use(Use { path, span }) => self.eval_use(path, env, span),
         }
     }
 
     fn eval_body(&self, body: Vec<Stmt>, env: &Arc<Mutex<Env>>) -> Result<Val> {
-        body.into_iter()
-            .map(|stmt| self.eval(stmt, env))
-            .last()
-            .unwrap_or(Ok(Val::NONE))
+        let mut last = Val::NONE;
+        for stmt in body {
+            last = self.eval(stmt, env)?;
+        }
+        Ok(last)
     }
 
     fn eval_cond(&self, condition: Expr, body: Vec<Stmt>, env: &Arc<Mutex<Env>>) -> Result<Val> {
@@ -244,13 +252,13 @@ impl Interpreter {
     }
 
     fn eval_pipe_expr(&self, left: Expr, right: Expr, env: &Arc<Mutex<Env>>) -> Result<Val> {
-        let ExprKind::Call { caller, mut args } = right.kind else {
-            return Err(InterpreterError::InvalidPipeCaller { span: right.span }.into());
-        };
-
-        args.insert(0, left);
-
-        self.eval_call(*caller, args, env, right.span)
+        match right.kind {
+            ExprKind::Call { caller, mut args } => {
+                args.insert(0, left);
+                self.eval_call(*caller, args, env, right.span)
+            }
+            _ => return Err(InterpreterError::InvalidPipeCaller { span: right.span }.into()),
+        }
     }
 
     fn eval_call(
@@ -260,22 +268,44 @@ impl Interpreter {
         env: &Arc<Mutex<Env>>,
         span: SourceSpan,
     ) -> Result<Val> {
+        // Since we'll be (potentially) switching environments if the caller is a module,
+        // we should parse all of the arguments in the current environment first
         let args = args
             .into_iter()
             .map(|arg| self.eval(arg, env))
             .collect::<Result<Vec<Val>>>()?;
 
-        let caller_span = caller.span;
+        // We introduce another parameter here, so we don't lose the original environment
+        self._eval_call(caller, args, env, env, span)
+    }
 
-        // Check built-in functions first
-        if let ExprKind::Ident(ref ident) = caller.kind {
-            if let Some(builtin) = Env::lookup_builtin(env, ident) {
-                let result = builtin.run(&args, env);
-                return Ok(result.unwrap_or(Val::NONE));
+    fn _eval_call(
+        &self,
+        caller: Expr,
+        args: Vec<Val>,
+        env: &Arc<Mutex<Env>>,
+        mod_env: &Arc<Mutex<Env>>,
+        span: SourceSpan,
+    ) -> Result<Val> {
+        match caller.kind {
+            ExprKind::Mod { module, item } => {
+                // If the caller is a member of a module, find the module
+                let mod_env = self.lookup_module(*module, env)?;
+                // Now call in the module's environment instead
+                return self._eval_call(*item, args, env, &mod_env, span);
             }
+            ExprKind::Ident(ref ident) => {
+                // Check if the caller is a built-in function
+                if let Some(builtin) = Env::lookup_builtin(mod_env, &ident) {
+                    let result = builtin.run(&args, env);
+                    return Ok(result.unwrap_or(Val::NONE));
+                }
+            }
+            _ => (),
         }
 
-        // Now check for user-defined functions
+        let caller_span = caller.span;
+        // Caller must be a user-defined function at this point
         let ValKind::Func {
             params, body, env, ..
         } = self.eval(caller, env)?.kind
@@ -494,6 +524,24 @@ impl Interpreter {
     }
 
     fn eval_mod_expr(&self, module: Expr, item: Expr, env: &Arc<Mutex<Env>>) -> Result<Val> {
+        let mod_env = self.lookup_module(module, env)?;
+        self.eval(item, &mod_env)
+    }
+
+    fn eval_use(&self, path: String, env: &Arc<Mutex<Env>>, span: SourceSpan) -> Result<Val> {
+        // Hacky way to handle `std` modules, for now
+        if path.contains("std")
+            && Env::lookup(env, &path.replace("std/", ""), (0, 0).into()).is_ok()
+        {
+            return Ok(Val::NONE);
+        }
+
+        self.use_evaluator.eval_use(self, path, env, span)?;
+
+        Ok(Val::NONE)
+    }
+
+    fn lookup_module(&self, module: Expr, env: &Arc<Mutex<Env>>) -> Result<Arc<Mutex<Env>>> {
         let span = module.span;
 
         let Val {
@@ -504,11 +552,6 @@ impl Interpreter {
             return Err(InterpreterError::InvalidModule { span }.into());
         };
 
-        self.eval(item, &mod_env)
-    }
-
-    fn eval_use(&self, path: String, env: &Arc<Mutex<Env>>) -> Result<Val> {
-        self.use_evaluator.eval_use(self, path, env)?;
-        Ok(Val::NONE)
+        Ok(mod_env)
     }
 }

@@ -221,9 +221,10 @@ impl Parser {
 
     fn parse_use(&mut self) -> Result<Use> {
         // Consume the `use` keyword
-        let mut span = self.consume().span;
+        self.consume();
 
         let mut path = String::new();
+        let mut span = self.peek().unwrap().span;
 
         loop {
             let token = self.consume();
@@ -238,22 +239,25 @@ impl Parser {
                 return Err(ParserError::UseNonIdent { span: token_span }.into());
             };
 
-            path.push_str(&format!("/{ident}"));
+            path.push_str(&format!("{ident}/"));
             span = (
-                span.offset() + token_span.offset(),
-                token_span.offset() - span.offset(),
+                span.offset(),
+                token_span.offset() - span.offset() + token_span.len(),
             )
                 .into();
 
             // Subsequent arguments will be
-            if self.peek_kind() == Some(&TokenKind::Dot) {
+            if self.peek_kind() == Some(&TokenKind::Slash) {
                 self.consume();
             } else {
                 break;
             }
         }
 
-        Ok(Use { path })
+        // Remove trailing `/`
+        path.pop();
+
+        Ok(Use { path, span })
     }
 
     fn parse_loop(&mut self) -> Result<Loop> {
@@ -578,7 +582,7 @@ impl Parser {
             // Consume the operator
             self.consume();
 
-            let right = self.parse_multiplicative_expr()?;
+            let right = self.parse_unary_expr()?;
             let span = (
                 left.span.offset(),
                 (right.span.offset() - left.span.offset()) + right.span.len(),
@@ -624,36 +628,12 @@ impl Parser {
                     span: span.into(),
                 })
             }
-            _ => self.parse_mod_expr(),
+            _ => self.parse_call_expr(),
         }
-    }
-
-    fn parse_mod_expr(&mut self) -> Result<Expr> {
-        let mut left = self.parse_call_expr()?;
-
-        if self.peek_kind() == Some(&TokenKind::Dot) {
-            self.consume();
-
-            let right = self.parse_mod_expr()?;
-            let span = (
-                left.span.offset(),
-                (right.span.offset() - left.span.offset()) + right.span.len(),
-            );
-
-            left = Expr {
-                kind: ExprKind::Mod {
-                    module: Box::new(left),
-                    item: Box::new(right),
-                },
-                span: span.into(),
-            }
-        }
-
-        Ok(left)
     }
 
     fn parse_call_expr(&mut self) -> Result<Expr> {
-        let mut left = self.parse_list_expr()?;
+        let mut left = self.parse_mod_expr()?;
 
         if self.peek_kind() == Some(&TokenKind::LeftParen) {
             self.consume();
@@ -672,6 +652,30 @@ impl Parser {
                 kind: ExprKind::Call {
                     caller: Box::new(left),
                     args,
+                },
+                span: span.into(),
+            }
+        }
+
+        Ok(left)
+    }
+
+    fn parse_mod_expr(&mut self) -> Result<Expr> {
+        let mut left = self.parse_list_expr()?;
+
+        while self.peek_kind() == Some(&TokenKind::Dot) {
+            self.consume();
+
+            let right = self.parse_list_expr()?;
+            let span = (
+                left.span.offset(),
+                (right.span.offset() - left.span.offset()) + right.span.len(),
+            );
+
+            left = Expr {
+                kind: ExprKind::Mod {
+                    module: Box::new(left),
+                    item: Box::new(right),
                 },
                 span: span.into(),
             }

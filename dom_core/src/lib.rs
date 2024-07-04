@@ -8,5 +8,5 @@ mod util;
 
 pub use ast::Expr;
 pub use environment::{BuiltinFn, BuiltinRegistry, Env, Val, ValKind};
-pub use interpreter::{Interpreter, UseEvaluator};
+pub use interpreter::{Interpreter, InterpreterError, UseEvaluator};
 pub use parser::Parser;

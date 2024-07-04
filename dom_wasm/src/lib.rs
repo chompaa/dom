@@ -27,22 +27,21 @@ pub fn init_miette_hook() {
     }));
 }
 
-fn register_builtins(env: &Arc<Mutex<Env>>) {
+fn register_builtins(env: &mut Arc<Mutex<Env>>) {
     env.lock()
         .unwrap()
-        .register_builtin::<std::PrintFn>()
-        .register_builtin::<std::InputFn>()
-        .register_builtin::<std::GetFn>()
-        .register_builtin::<std::SetFn>()
-        .register_builtin::<std::PushFn>()
-        .register_builtin::<std::PopFn>()
-        .register_builtin::<std::LenFn>();
+        .register_builtin::<std::PrintFn>("io")
+        .register_builtin::<std::GetFn>("list")
+        .register_builtin::<std::SetFn>("list")
+        .register_builtin::<std::PushFn>("list")
+        .register_builtin::<std::PopFn>("list")
+        .register_builtin::<std::LenFn>("list");
 }
 
 #[wasm_bindgen]
 pub fn interpret(source: &str) -> String {
-    let env = Env::new();
-    register_builtins(&env);
+    let mut env = Env::new();
+    register_builtins(&mut env);
 
     let (ast, program) = match Parser::new(source.to_string()).produce_ast() {
         Ok(program) => (format!("{program:#?}"), program),

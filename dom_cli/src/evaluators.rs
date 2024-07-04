@@ -1,11 +1,11 @@
-use dom_core::{Env, Interpreter, Parser, UseEvaluator, ValKind};
+use dom_core::{Env, Interpreter, InterpreterError, Parser, UseEvaluator, ValKind};
 
 use std::{
     fs::read_to_string,
     sync::{Arc, Mutex},
 };
 
-use miette::Result;
+use miette::{Result, SourceSpan};
 
 pub struct CliUseEvaluator;
 
@@ -15,6 +15,7 @@ impl UseEvaluator for CliUseEvaluator {
         interpreter: &Interpreter,
         path: String,
         env: &Arc<Mutex<Env>>,
+        span: SourceSpan,
     ) -> Result<()> {
         // Modules are identified using the last name later, e.g.
         //
@@ -23,7 +24,9 @@ impl UseEvaluator for CliUseEvaluator {
         // bar.call()
         // ```
         let ident = path.split('/').last().unwrap();
-        let source = read_to_string(format!(".{}.dom", &path)).unwrap();
+        let Ok(source) = read_to_string(format!(".{}.dom", &path)) else {
+            return Err(InterpreterError::ModuleNotFound { span }.into());
+        };
 
         let program = Parser::new(source.to_string()).produce_ast()?;
 

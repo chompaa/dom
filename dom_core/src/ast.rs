@@ -215,4 +215,5 @@ impl fmt::Display for ExprKind {
 #[derive(Debug, Clone)]
 pub struct Use {
     pub path: String,
+    pub span: SourceSpan,
 }

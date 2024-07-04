@@ -193,9 +193,28 @@ impl Env {
         &self.builtins
     }
 
-    pub fn register_builtin<F: BuiltinFn + Send + Sync + Default + 'static>(&self) -> &Self {
-        let builtins = &mut Arc::clone(&self.builtins);
+    pub fn register_builtin<F: BuiltinFn + Send + Sync + Default + 'static>(
+        &mut self,
+        path: &str,
+    ) -> &mut Self {
+        let mod_env = match self.values.get(path) {
+            // If the path already has a defined module, use it
+            Some(Val {
+                kind: ValKind::Mod(mod_env),
+                ..
+            }) => Arc::clone(mod_env),
+            // Otherwise, create a new module, and declare the path
+            _ => {
+                let mod_env = Env::new();
+                let value = ValKind::Mod(Arc::clone(&mod_env));
+                self.declare_unchecked(path.to_string(), value.into());
+                mod_env
+            }
+        };
+
+        let builtins = &mod_env.lock().unwrap().builtins;
         builtins.lock().unwrap().register(Arc::new(F::default()));
+
         self
     }
 
@@ -220,7 +239,7 @@ impl Env {
     ///
     /// Does not return anything.
     pub fn declare_unchecked(&mut self, name: String, value: Val) {
-        self.values.insert(name, value);
+        self.values.insert(name.to_string(), value.with_ident(name));
     }
 
     /// Assigns a new value to the variable with the given name.
@@ -230,6 +249,8 @@ impl Env {
         // Find the environment where the variable is declared.
         let env = Self::resolve(env, name, span)?;
         let values = &mut env.lock().unwrap().values;
+
+        let value = value.with_ident(name.to_string());
 
         values.insert(name.to_string(), value.clone());
 
@@ -242,6 +263,8 @@ impl Env {
         // Find the environment where the variable is declared.
         let env = Self::resolve(env, name, (0, 0).into()).unwrap();
         let values = &mut env.lock().unwrap().values;
+
+        let value = value.with_ident(name.to_string());
 
         values.insert(name.to_string(), value.clone());
 
@@ -318,7 +341,7 @@ mod tests {
         // Declare a variable in the environment
         env.lock()
             .unwrap()
-            .declare(name.to_string(), value.clone(), span)
+            .declare(name, value.clone(), span)
             .expect("should be able to declare variable");
 
         // Lookup the variable
@@ -336,12 +359,12 @@ mod tests {
         let span = (0, 3).into();
 
         // Declare a variable in the environment
-        env.declare(name.to_string(), value.clone(), span)
+        env.declare(name, value.clone(), span)
             .expect("should be able to declare variable");
 
         // Attempt to redeclare the same variable
         let result = env
-            .declare(name.to_string(), value.clone(), span)
+            .declare(name, value.clone(), span)
             .expect_err("result should be an error");
 
         assert!(matches!(
@@ -377,12 +400,12 @@ mod tests {
         // Declare a variable in the environment
         env.lock()
             .unwrap()
-            .declare(name.to_string(), value.clone(), span)
+            .declare(name, value.clone(), span)
             .expect("should be able to declare variable");
 
         // Assign a new value to the variable
         let value: Val = ValKind::Int(1).into();
-        Env::assign(&env, name.to_string(), value.clone(), span)
+        Env::assign(&env, name, value.clone(), span)
             .expect("should be able to assign value to variable");
 
         // Lookup the variable
@@ -402,11 +425,11 @@ mod tests {
         parent_env
             .lock()
             .unwrap()
-            .declare(name.to_string(), value.clone(), span)
+            .declare(name, value.clone(), span)
             .expect("should be able to declare variable");
 
         // Create a child environment with the parent environment
-        let child_env = Env::with_parent(Arc::clone(&parent_env));
+        let child_env = Env::with_parent(&Arc::clone(&parent_env));
 
         // Lookup the variable from the child environment
         let result = Env::lookup(&child_env, &name, span);
@@ -418,7 +441,7 @@ mod tests {
         parent_env
             .lock()
             .unwrap()
-            .declare(name.to_string(), value.clone(), span)
+            .declare(name, value.clone(), span)
             .expect("should be able to declare variable");
 
         // Lookup the new variable from the child environment

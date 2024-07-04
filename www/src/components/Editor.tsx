@@ -11,26 +11,31 @@ const Editor = ({
 }: {
   editorRef: React.MutableRefObject<null | editor.IStandaloneCodeEditor>;
 }) => {
-  const defaultValue = `// Prints a sequence from \`0\` to \`end\`
-fn print_sequence(end) {
+  const defaultValue = `use std/io
+use std/list
+
+fn show_monotonic_lists(end) {
     if end < 0 {
-        // Negative numbers are bad!
         return
     }
 
-    let curr = 0
+    let result = []
+    let count = 1
+
     loop {
-        print(curr)
-        if curr >= end {
-            // Exit the loop
+        if count >= end {
             break
         }
-        // Increment \`curr\`
-        curr = curr + 1
+
+        result
+        |> list.push(count)
+        |> io.print()
+
+        count = count + 1
     }
 }
 
-print_sequence(10)`;
+show_monotonic_lists(10)`;
 
   const handleEditorDidMount: OnMount = (editor, _) => {
     editorRef.current = editor;
