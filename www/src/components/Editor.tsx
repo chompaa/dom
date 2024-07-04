@@ -5,37 +5,14 @@ import {
 } from "@monaco-editor/react";
 import { editor } from "monaco-editor";
 import React from "react";
+import useGist from "../hooks/useGist";
 
 const Editor = ({
   editorRef,
 }: {
   editorRef: React.MutableRefObject<null | editor.IStandaloneCodeEditor>;
 }) => {
-  const defaultValue = `use std/io
-use std/list
-
-fn show_monotonic_lists(end) {
-    if end < 0 {
-        return
-    }
-
-    let result = []
-    let count = 1
-
-    loop {
-        if count >= end {
-            break
-        }
-
-        result
-        |> list.push(count)
-        |> io.print()
-
-        count = count + 1
-    }
-}
-
-show_monotonic_lists(10)`;
+  const [content] = useGist("79a9be2dc55a81c3555eaaab1b600228");
 
   const handleEditorDidMount: OnMount = (editor, _) => {
     editorRef.current = editor;
@@ -128,7 +105,7 @@ show_monotonic_lists(10)`;
   return (
     <MonacoEditor
       defaultLanguage="dom"
-      defaultValue={defaultValue}
+      defaultValue={content ?? ""}
       onMount={handleEditorDidMount}
       beforeMount={handleEditorWillMount}
       theme="gruvbox-light"
