@@ -4,17 +4,15 @@ use dom_core::{BuiltinFn, Env, ModuleHook, Val, ValKind};
 
 use ::std::sync::{Arc, Mutex};
 
-use miette::Result;
-
 #[derive(Default)]
 pub struct StdModule;
 
 impl ModuleHook for StdModule {
-    fn use_module(&self, path: String, env: &Arc<Mutex<Env>>) -> Result<Option<()>> {
+    fn use_module(&self, path: String, env: &Arc<Mutex<Env>>) -> Option<()> {
         let mut path = path.split('/');
 
         let Some("std") = path.next() else {
-            return Ok(None);
+            return None;
         };
 
         let mut env = env.lock().unwrap();
@@ -27,9 +25,9 @@ impl ModuleHook for StdModule {
                     .register_builtin::<list::PopFn>("list")
                     .register_builtin::<list::LenFn>("list");
             }
-            Some(_) | None => return Ok(None),
+            Some(_) | None => return None,
         };
 
-        Ok(Some(()))
+        Some(())
     }
 }

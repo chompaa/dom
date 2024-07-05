@@ -1,6 +1,4 @@
-use dom_core::{
-    BuiltinFn, Env, Interpreter, InterpreterError, ModuleHook, Parser, UseHook, Val, ValKind,
-};
+use dom_core::{BuiltinFn, Env, Interpreter, ModuleHook, Parser, UseHook, Val, ValKind};
 use dom_std::StdModule;
 
 use std::{
@@ -9,7 +7,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use miette::{Result, SourceSpan};
+use miette::Result;
 
 #[derive(Default)]
 pub struct CliUseHook;
@@ -20,8 +18,7 @@ impl UseHook for CliUseHook {
         interpreter: &Interpreter,
         path: String,
         env: &Arc<Mutex<Env>>,
-        span: SourceSpan,
-    ) -> Result<()> {
+    ) -> Result<Option<()>> {
         // Modules are identified using the last name later, e.g.
         //
         // ```
@@ -30,7 +27,7 @@ impl UseHook for CliUseHook {
         // ```
         let ident = path.split('/').last().unwrap();
         let Ok(source) = read_to_string(format!(".{}.dom", &path)) else {
-            return Err(InterpreterError::ModuleNotFound { span }.into());
+            return Ok(None);
         };
 
         let program = Parser::new(source.to_string()).produce_ast()?;
@@ -42,7 +39,7 @@ impl UseHook for CliUseHook {
 
         env.declare_unchecked(ident.to_string(), ValKind::Mod(mod_env).into());
 
-        Ok(())
+        Ok(Some(()))
     }
 }
 
@@ -50,14 +47,14 @@ impl UseHook for CliUseHook {
 pub struct CliModuleHook;
 
 impl ModuleHook for CliModuleHook {
-    fn use_module(&self, path: String, env: &Arc<Mutex<Env>>) -> Result<Option<()>> {
+    fn use_module(&self, path: String, env: &Arc<Mutex<Env>>) -> Option<()> {
         if path == "std/io" {
             env.lock()
                 .unwrap()
                 .register_builtin::<PrintFn>("io")
                 .register_builtin::<InputFn>("io");
 
-            return Ok(Some(()));
+            return Some(());
         }
 
         StdModule.use_module(path, env)

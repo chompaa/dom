@@ -3,21 +3,15 @@ use dom_std::StdModule;
 
 use std::sync::{Arc, Mutex};
 
-use miette::{Result, SourceSpan};
+use miette::Result;
 use web_sys::console;
 
 #[derive(Default)]
 pub struct WasmUseHook;
 
 impl UseHook for WasmUseHook {
-    fn eval_use(
-        &self,
-        _: &Interpreter,
-        _: String,
-        _: &Arc<Mutex<Env>>,
-        _: SourceSpan,
-    ) -> Result<()> {
-        Ok(())
+    fn eval_use(&self, _: &Interpreter, _: String, _: &Arc<Mutex<Env>>) -> Result<Option<()>> {
+        Ok(Some(()))
     }
 }
 
@@ -25,11 +19,11 @@ impl UseHook for WasmUseHook {
 pub struct WasmModuleHook;
 
 impl ModuleHook for WasmModuleHook {
-    fn use_module(&self, path: String, env: &Arc<Mutex<Env>>) -> Result<Option<()>> {
+    fn use_module(&self, path: String, env: &Arc<Mutex<Env>>) -> Option<()> {
         if path == "std/io" {
             env.lock().unwrap().register_builtin::<PrintFn>("io");
 
-            return Ok(Some(()));
+            return Some(());
         }
 
         StdModule.use_module(path, env)

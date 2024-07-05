@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use miette::{Diagnostic, Result, SourceSpan};
+use miette::{Diagnostic, ErrReport, Result, SourceSpan};
 use thiserror::Error;
 
 use crate::{
@@ -84,6 +84,14 @@ pub enum InterpreterError {
     },
 }
 
+impl From<ErrReport> for InterpreterError {
+    fn from(value: ErrReport) -> Self {
+        value
+            .downcast::<InterpreterError>()
+            .expect("could not cast `ErrReport` to `InterpreterError`")
+    }
+}
+
 #[derive(Error, Diagnostic, Debug)]
 pub enum Exception {
     #[error("cannot break out of non-loop")]
@@ -100,12 +108,11 @@ pub trait UseHook {
         interpreter: &Interpreter,
         path: String,
         env: &Arc<Mutex<Env>>,
-        span: SourceSpan,
-    ) -> Result<()>;
+    ) -> Result<Option<()>>;
 }
 
 pub trait ModuleHook {
-    fn use_module(&self, path: String, env: &Arc<Mutex<Env>>) -> Result<Option<()>>;
+    fn use_module(&self, path: String, env: &Arc<Mutex<Env>>) -> Option<()>;
 }
 
 pub struct Interpreter {
@@ -537,17 +544,14 @@ impl Interpreter {
     }
 
     fn eval_use(&self, path: &str, env: &Arc<Mutex<Env>>, span: SourceSpan) -> Result<Val> {
-        if self
-            .module_hook
-            .use_module(path.to_string(), env)?
-            .is_some()
-        {
+        if self.module_hook.use_module(path.to_string(), env).is_some() {
             return Ok(Val::NONE);
         }
 
-        self.use_hook.eval_use(self, path.to_string(), env, span)?;
-
-        Ok(Val::NONE)
+        self.use_hook.eval_use(self, path.to_string(), env).map_or(
+            Err(InterpreterError::ModuleNotFound { span }.into()),
+            |_| Ok(Val::NONE),
+        )
     }
 
     fn lookup_module(&self, module: Expr, env: &Arc<Mutex<Env>>) -> Result<Arc<Mutex<Env>>> {
