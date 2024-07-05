@@ -71,13 +71,13 @@ pub enum InterpreterError {
         span: SourceSpan,
     },
     #[error("module not found")]
-    #[diagnostic(code(interpreter::mismatched_args))]
+    #[diagnostic(code(interpreter::module_not_found))]
     ModuleNotFound {
         #[label("this module could not be found")]
         span: SourceSpan,
     },
     #[error("expression is not a valid module")]
-    #[diagnostic(code(interpreter::mismatched_args))]
+    #[diagnostic(code(interpreter::invalid_module))]
     InvalidModule {
         #[label("this expression is not a module")]
         span: SourceSpan,
