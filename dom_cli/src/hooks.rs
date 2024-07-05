@@ -26,7 +26,7 @@ impl UseHook for CliUseHook {
         // bar.call()
         // ```
         let ident = path.split('/').last().unwrap();
-        let Ok(source) = read_to_string(format!(".{}.dom", &path)) else {
+        let Ok(source) = read_to_string(format!("./{}.dom", &path)) else {
             return Ok(None);
         };
 

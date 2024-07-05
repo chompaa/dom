@@ -267,12 +267,24 @@ impl Interpreter {
     }
 
     fn eval_pipe_expr(&self, left: Expr, right: Expr, env: &Arc<Mutex<Env>>) -> Result<Val> {
+        let span = right.span;
         match right.kind {
             ExprKind::Call { caller, mut args } => {
                 args.insert(0, left);
-                self.eval_call(*caller, args, env, right.span)
+                self.eval_call(*caller, args, env, span)
             }
-            _ => Err(InterpreterError::InvalidPipeCaller { span: right.span }.into()),
+            ExprKind::Mod { .. } => {
+                let call = ExprKind::Call {
+                    caller: Box::new(right),
+                    args: vec![],
+                };
+                self.eval_pipe_expr(left, Expr { kind: call, span }, env)
+            }
+            ExprKind::Ident(_) => {
+                let args = vec![left];
+                self.eval_call(right, args, env, span)
+            }
+            _ => Err(InterpreterError::InvalidPipeCaller { span }.into()),
         }
     }
 
@@ -312,6 +324,7 @@ impl Interpreter {
             ExprKind::Ident(ref ident) => {
                 // Check if the caller is a built-in function
                 if let Some(builtin) = Env::lookup_builtin(mod_env, ident) {
+                    // Run the built-in the original environment
                     let result = builtin.run(&args, env);
                     return Ok(result.unwrap_or(Val::NONE));
                 }
@@ -321,15 +334,18 @@ impl Interpreter {
 
         let caller_span = caller.span;
         // Caller must be a user-defined function at this point
+        //
+        // Evaluating the call in the module's environment is important, we don't have any
+        // of its context
         let ValKind::Func {
             params, body, env, ..
-        } = self.eval(caller, env)?.kind
+        } = self.eval(caller, mod_env)?.kind
         else {
             return Err(InterpreterError::CallerNotDefined { span: caller_span }.into());
         };
 
         if args.len() != params.len() {
-            return Err(InterpreterError::MismatchedArgs { span }.into());
+            return Err(InterpreterError::MismatchedArgs { span: caller_span }.into());
         }
 
         for (param, arg) in params.into_iter().zip(args.into_iter()) {
@@ -339,6 +355,7 @@ impl Interpreter {
         let mut last = None;
 
         for stmt in body {
+            // Run the defined function in the original environment
             let result = self.eval(stmt, &env);
 
             match result {
