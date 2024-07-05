@@ -7,7 +7,6 @@ import Editor from "./components/Editor";
 import TabItem from "./components/TabItem";
 import TabList from "./components/TabList";
 import useOutput from "./hooks/useOutput";
-import useGist from "./hooks/useGist";
 
 const App = () => {
   const source = "https://github.com/chompaa/dom";

@@ -105,7 +105,7 @@ const Editor = ({
   return (
     <MonacoEditor
       defaultLanguage="dom"
-      defaultValue={content ?? ""}
+      defaultValue={content}
       onMount={handleEditorDidMount}
       beforeMount={handleEditorWillMount}
       theme="gruvbox-light"

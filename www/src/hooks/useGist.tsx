@@ -1,18 +1,14 @@
 import { useState, useEffect } from "react";
 
-const useGist = (param?: string) => {
-  const [content, setContent] = useState<string | null>(null);
+const useGist = (defaultParam: string) => {
+  const [content, setContent] = useState<string>("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     let gistParam = params.get("gist");
 
     if (!gistParam) {
-      if (param) {
-        gistParam = param;
-      } else {
-        return;
-      }
+      gistParam = defaultParam;
     }
     const gistUrl = `https://api.github.com/gists/${gistParam}`;
 
@@ -27,6 +23,9 @@ const useGist = (param?: string) => {
         if ("content" in file) {
           const content = file.content as string;
           setContent(content);
+          console.info(`loaded gist: ${gistParam}`);
+        } else {
+          console.warn("gist didn't have any content");
         }
       } catch (err) {
         console.error(err);
