@@ -1,5 +1,4 @@
-mod evaluators;
-mod std;
+mod hooks;
 
 use dom_core::{Env, Interpreter, Parser};
 
@@ -27,21 +26,9 @@ pub fn init_miette_hook() {
     }));
 }
 
-fn register_builtins(env: &mut Arc<Mutex<Env>>) {
-    env.lock()
-        .unwrap()
-        .register_builtin::<std::PrintFn>("io")
-        .register_builtin::<std::GetFn>("list")
-        .register_builtin::<std::SetFn>("list")
-        .register_builtin::<std::PushFn>("list")
-        .register_builtin::<std::PopFn>("list")
-        .register_builtin::<std::LenFn>("list");
-}
-
 #[wasm_bindgen]
 pub fn interpret(source: &str) -> String {
-    let mut env = Env::new();
-    register_builtins(&mut env);
+    let env = Env::new();
 
     let (ast, program) = match Parser::new(source.to_string()).produce_ast() {
         Ok(program) => (format!("{program:#?}"), program),
@@ -52,8 +39,10 @@ pub fn interpret(source: &str) -> String {
         }
     };
 
-    let module_evaluator = Box::new(evaluators::WasmUseEvaluator);
-    if let Err(error) = Interpreter::new(module_evaluator).eval(program, &env) {
+    let use_hook = Box::new(hooks::WasmUseHook);
+    let module_hook = Box::new(hooks::WasmModuleHook);
+
+    if let Err(error) = Interpreter::new(use_hook, module_hook).eval(program, &env) {
         let error = error.with_source_code(source.to_string());
         console::log_1(&format!("{error:?}").into());
     }

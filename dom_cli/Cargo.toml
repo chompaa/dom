@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 dom_core = { path = "../dom_core/" }
+dom_std = { path = "../dom_std/" }
 thiserror.workspace = true
 miette = { workspace = true, features = ["fancy"] }
 clap = { version = "4.5.4", features = ["derive"] }

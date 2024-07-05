@@ -1,9 +1,6 @@
-mod evaluators;
+mod hooks;
 
-use dom_core::{
-    std::{self},
-    Env, Interpreter, Parser, Val,
-};
+use dom_core::{Env, Interpreter, Parser, Val};
 
 use ::std::{
     fs::read_to_string,
@@ -22,29 +19,19 @@ struct Args {
 fn result(source: &str, env: &Arc<Mutex<Env>>) -> Result<Val> {
     (|| -> Result<Val> {
         let program = Parser::new(source.to_string()).produce_ast()?;
-        let module_evaluator = Box::new(evaluators::CliUseEvaluator);
-        Interpreter::new(module_evaluator).eval(program, env)
+
+        let use_hook = Box::new(hooks::CliUseHook);
+        let module_hook = Box::new(hooks::CliModuleHook);
+
+        Interpreter::new(use_hook, module_hook).eval(program, env)
     })()
     .map_err(|error| error.with_source_code(source.to_string()))
-}
-
-fn register_builtins(env: &mut Arc<Mutex<Env>>) {
-    env.lock()
-        .unwrap()
-        .register_builtin::<std::PrintFn>("io")
-        .register_builtin::<std::InputFn>("io")
-        .register_builtin::<std::GetFn>("list")
-        .register_builtin::<std::SetFn>("list")
-        .register_builtin::<std::PushFn>("list")
-        .register_builtin::<std::PopFn>("list")
-        .register_builtin::<std::LenFn>("list");
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    let mut env = Env::new();
-    register_builtins(&mut env);
+    let env = Env::new();
 
     match args.path {
         // File mode

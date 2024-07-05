@@ -94,7 +94,7 @@ pub enum Exception {
     Return(Option<Box<Expr>>),
 }
 
-pub trait UseEvaluator {
+pub trait UseHook {
     fn eval_use(
         &self,
         interpreter: &Interpreter,
@@ -104,13 +104,21 @@ pub trait UseEvaluator {
     ) -> Result<()>;
 }
 
+pub trait ModuleHook {
+    fn use_module(&self, path: String, env: &Arc<Mutex<Env>>) -> Result<Option<()>>;
+}
+
 pub struct Interpreter {
-    use_evaluator: Box<dyn UseEvaluator>,
+    use_hook: Box<dyn UseHook>,
+    module_hook: Box<dyn ModuleHook>,
 }
 
 impl Interpreter {
-    pub fn new(use_evaluator: Box<dyn UseEvaluator>) -> Self {
-        Self { use_evaluator }
+    pub fn new(use_hook: Box<dyn UseHook>, module_hook: Box<dyn ModuleHook>) -> Self {
+        Self {
+            use_hook,
+            module_hook,
+        }
     }
 
     pub fn eval(&self, statement: impl Into<Stmt>, env: &Arc<Mutex<Env>>) -> Result<Val> {
@@ -157,7 +165,7 @@ impl Interpreter {
                     ExprKind::Mod { module, item } => self.eval_mod_expr(*module, *item, env),
                 }
             }
-            Stmt::Use(Use { path, span }) => self.eval_use(path, env, span),
+            Stmt::Use(Use { path, span }) => self.eval_use(&path, env, span),
         }
     }
 
@@ -528,15 +536,12 @@ impl Interpreter {
         self.eval(item, &mod_env)
     }
 
-    fn eval_use(&self, path: String, env: &Arc<Mutex<Env>>, span: SourceSpan) -> Result<Val> {
-        // Hacky way to handle `std` modules, for now
-        if path.contains("std")
-            && Env::lookup(env, &path.replace("std/", ""), (0, 0).into()).is_ok()
-        {
+    fn eval_use(&self, path: &str, env: &Arc<Mutex<Env>>, span: SourceSpan) -> Result<Val> {
+        if let Some(_) = self.module_hook.use_module(path.to_string(), env)? {
             return Ok(Val::NONE);
         }
 
-        self.use_evaluator.eval_use(self, path, env, span)?;
+        self.use_hook.eval_use(self, path.to_string(), env, span)?;
 
         Ok(Val::NONE)
     }
