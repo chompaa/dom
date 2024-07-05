@@ -265,7 +265,7 @@ impl Interpreter {
                 args.insert(0, left);
                 self.eval_call(*caller, args, env, right.span)
             }
-            _ => return Err(InterpreterError::InvalidPipeCaller { span: right.span }.into()),
+            _ => Err(InterpreterError::InvalidPipeCaller { span: right.span }.into()),
         }
     }
 
@@ -304,7 +304,7 @@ impl Interpreter {
             }
             ExprKind::Ident(ref ident) => {
                 // Check if the caller is a built-in function
-                if let Some(builtin) = Env::lookup_builtin(mod_env, &ident) {
+                if let Some(builtin) = Env::lookup_builtin(mod_env, ident) {
                     let result = builtin.run(&args, env);
                     return Ok(result.unwrap_or(Val::NONE));
                 }
@@ -537,7 +537,11 @@ impl Interpreter {
     }
 
     fn eval_use(&self, path: &str, env: &Arc<Mutex<Env>>, span: SourceSpan) -> Result<Val> {
-        if let Some(_) = self.module_hook.use_module(path.to_string(), env)? {
+        if self
+            .module_hook
+            .use_module(path.to_string(), env)?
+            .is_some()
+        {
             return Ok(Val::NONE);
         }
 

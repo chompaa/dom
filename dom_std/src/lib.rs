@@ -11,7 +11,7 @@ pub struct StdModule;
 
 impl ModuleHook for StdModule {
     fn use_module(&self, path: String, env: &Arc<Mutex<Env>>) -> Result<Option<()>> {
-        let mut path = path.split("/");
+        let mut path = path.split('/');
 
         let Some("std") = path.next() else {
             return Ok(None);
