@@ -5,17 +5,42 @@ import {
 } from "@monaco-editor/react";
 import { editor } from "monaco-editor";
 import React from "react";
-import useGist from "../hooks/useGist";
 
 const Editor = ({
   editorRef,
 }: {
   editorRef: React.MutableRefObject<null | editor.IStandaloneCodeEditor>;
 }) => {
-  const [content] = useGist("79a9be2dc55a81c3555eaaab1b600228");
+  const DEFAULT_GIST = "79a9be2dc55a81c3555eaaab1b600228";
 
-  const handleEditorDidMount: OnMount = (editor, _) => {
+  const useGist = async (): Promise<string> => {
+    const params = new URLSearchParams(window.location.search);
+    let gistParam = params.get("gist");
+
+    if (!gistParam) {
+      // If no gist query was provided, use the default one
+      gistParam = DEFAULT_GIST;
+    }
+
+    const gistUrl = `https://api.github.com/gists/${gistParam}`;
+
+    const response = await fetch(gistUrl);
+    if (!response.ok) {
+      console.log("gist network response was not ok");
+      return "";
+    }
+
+    const data = await response.json();
+    const file = Object.values(data["files"])[0] as { content: string };
+
+    console.info(`loaded gist: ${gistParam}`);
+    return file.content;
+  };
+
+  const handleEditorDidMount: OnMount = async (editor, _) => {
     editorRef.current = editor;
+    const content = await useGist();
+    editor.setValue(content);
   };
 
   const handleEditorWillMount: BeforeMount = (monaco) => {
@@ -105,7 +130,7 @@ const Editor = ({
   return (
     <MonacoEditor
       defaultLanguage="dom"
-      defaultValue={content}
+      defaultValue={""}
       onMount={handleEditorDidMount}
       beforeMount={handleEditorWillMount}
       theme="gruvbox-light"

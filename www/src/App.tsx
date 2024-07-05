@@ -9,7 +9,7 @@ import TabList from "./components/TabList";
 import useOutput from "./hooks/useOutput";
 
 const App = () => {
-  const source = "https://github.com/chompaa/dom";
+  const SOURCE = "https://github.com/chompaa/dom";
   const editorRef = useRef<null | editor.IStandaloneCodeEditor>(null);
   const [output, writeOutput, clearOutput] = useOutput();
   const [ast, setAst] = useState("");
@@ -38,7 +38,7 @@ const App = () => {
         <h1>dom playground</h1>
         <a
           className="mr-1 border-2 border-zinc-100 bg-zinc-800 px-2 hover:bg-zinc-100 hover:text-zinc-800"
-          href={source}
+          href={SOURCE}
           target="_blank"
         >
           source
