@@ -2,8 +2,6 @@ mod hooks;
 
 use dom_core::{Env, Interpreter, Parser};
 
-use ::std::sync::{Arc, Mutex};
-
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
@@ -39,10 +37,9 @@ pub fn interpret(source: &str) -> String {
         }
     };
 
-    let use_hook = Box::new(hooks::WasmUseHook);
-    let module_hook = Box::new(hooks::WasmModuleHook);
-
-    if let Err(error) = Interpreter::new(use_hook, module_hook).eval(program, &env) {
+    if let Err(error) =
+        Interpreter::new::<hooks::WasmUseHook, hooks::WasmModuleHook>().eval(program, &env)
+    {
         let error = error.with_source_code(source.to_string());
         console::log_1(&format!("{error:?}").into());
     }

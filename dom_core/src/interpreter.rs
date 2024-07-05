@@ -114,10 +114,10 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new(use_hook: Box<dyn UseHook>, module_hook: Box<dyn ModuleHook>) -> Self {
+    pub fn new<U: UseHook + Default + 'static, M: ModuleHook + Default + 'static>() -> Self {
         Self {
-            use_hook,
-            module_hook,
+            use_hook: Box::new(U::default()),
+            module_hook: Box::new(M::default()),
         }
     }
 

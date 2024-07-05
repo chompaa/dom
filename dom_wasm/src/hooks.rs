@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use miette::{Result, SourceSpan};
 use web_sys::console;
 
+#[derive(Default)]
 pub struct WasmUseHook;
 
 impl UseHook for WasmUseHook {
@@ -20,6 +21,7 @@ impl UseHook for WasmUseHook {
     }
 }
 
+#[derive(Default)]
 pub struct WasmModuleHook;
 
 impl ModuleHook for WasmModuleHook {
@@ -30,7 +32,7 @@ impl ModuleHook for WasmModuleHook {
             return Ok(Some(()));
         }
 
-        StdModule::default().use_module(path, env)
+        StdModule.use_module(path, env)
     }
 }
 

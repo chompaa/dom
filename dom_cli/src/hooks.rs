@@ -11,6 +11,7 @@ use std::{
 
 use miette::{Result, SourceSpan};
 
+#[derive(Default)]
 pub struct CliUseHook;
 
 impl UseHook for CliUseHook {
@@ -45,6 +46,7 @@ impl UseHook for CliUseHook {
     }
 }
 
+#[derive(Default)]
 pub struct CliModuleHook;
 
 impl ModuleHook for CliModuleHook {
@@ -58,7 +60,7 @@ impl ModuleHook for CliModuleHook {
             return Ok(Some(()));
         }
 
-        StdModule::default().use_module(path, env)
+        StdModule.use_module(path, env)
     }
 }
 

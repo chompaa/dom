@@ -19,11 +19,7 @@ struct Args {
 fn result(source: &str, env: &Arc<Mutex<Env>>) -> Result<Val> {
     (|| -> Result<Val> {
         let program = Parser::new(source.to_string()).produce_ast()?;
-
-        let use_hook = Box::new(hooks::CliUseHook);
-        let module_hook = Box::new(hooks::CliModuleHook);
-
-        Interpreter::new(use_hook, module_hook).eval(program, env)
+        Interpreter::new::<hooks::CliUseHook, hooks::CliModuleHook>().eval(program, env)
     })()
     .map_err(|error| error.with_source_code(source.to_string()))
 }
