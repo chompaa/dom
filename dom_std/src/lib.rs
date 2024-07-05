@@ -1,4 +1,5 @@
 mod list;
+mod str;
 
 use dom_core::{BuiltinFn, Env, ModuleHook, Val, ValKind};
 
@@ -24,6 +25,9 @@ impl ModuleHook for StdModule {
                     .register_builtin::<list::PushFn>("list")
                     .register_builtin::<list::PopFn>("list")
                     .register_builtin::<list::LenFn>("list");
+            }
+            Some("str") => {
+                env.register_builtin::<str::LenFn>("str");
             }
             Some(_) | None => return None,
         };
