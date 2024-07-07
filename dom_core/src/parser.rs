@@ -240,11 +240,7 @@ impl Parser {
             };
 
             path.push_str(&format!("{ident}/"));
-            span = (
-                span.offset(),
-                token_span.offset() - span.offset() + token_span.len(),
-            )
-                .into();
+            span = span.extend(token_span);
 
             // Subsequent arguments will be
             if self.peek_kind() == Some(&TokenKind::Slash) {
@@ -417,17 +413,14 @@ impl Parser {
             self.consume();
 
             let right = self.parse_pipe_expr()?;
-            let span = (
-                left.span.offset(),
-                (right.span.offset() - left.span.offset()) + right.span.len(),
-            );
+            let span = left.span.extend(right.span);
 
             left = Expr {
                 kind: ExprKind::Assignment {
                     assignee: Box::new(left),
                     value: Box::new(right),
                 },
-                span: span.into(),
+                span,
             }
         }
 
@@ -442,17 +435,14 @@ impl Parser {
             self.consume();
 
             let right = self.parse_logical_or_expr()?;
-            let span = (
-                left.span.offset(),
-                (right.span.offset() - left.span.offset()) + right.span.len(),
-            );
+            let span = left.span.extend(right.span);
 
             left = Expr {
                 kind: ExprKind::Pipe {
                     left: Box::new(left),
                     right: Box::new(right),
                 },
-                span: span.into(),
+                span,
             }
         }
 
@@ -467,10 +457,7 @@ impl Parser {
             self.consume();
 
             let right = self.parse_logical_and_expr()?;
-            let span = (
-                left.span.offset(),
-                (right.span.offset() - left.span.offset()) + right.span.len(),
-            );
+            let span = left.span.extend(right.span);
 
             left = Expr {
                 kind: ExprKind::LogicOp {
@@ -478,7 +465,7 @@ impl Parser {
                     right: Box::new(right),
                     op: LogicOp::Or,
                 },
-                span: span.into(),
+                span,
             }
         }
 
@@ -493,10 +480,7 @@ impl Parser {
             self.consume();
 
             let right = self.parse_rel_expr()?;
-            let span = (
-                left.span.offset(),
-                (right.span.offset() - left.span.offset()) + right.span.len(),
-            );
+            let span = left.span.extend(right.span);
 
             left = Expr {
                 kind: ExprKind::LogicOp {
@@ -504,7 +488,7 @@ impl Parser {
                     right: Box::new(right),
                     op: LogicOp::And,
                 },
-                span: span.into(),
+                span,
             }
         }
 
@@ -519,10 +503,7 @@ impl Parser {
             self.consume();
 
             let right = self.parse_additive_expr()?;
-            let span = (
-                left.span.offset(),
-                (right.span.offset() - left.span.offset()) + right.span.len(),
-            );
+            let span = left.span.extend(right.span);
 
             left = Expr {
                 kind: ExprKind::RelOp {
@@ -530,7 +511,7 @@ impl Parser {
                     right: Box::new(right),
                     op,
                 },
-                span: span.into(),
+                span,
             }
         }
 
@@ -551,10 +532,7 @@ impl Parser {
             self.consume();
 
             let right = self.parse_multiplicative_expr()?;
-            let span = (
-                left.span.offset(),
-                (right.span.offset() - left.span.offset()) + right.span.len(),
-            );
+            let span = left.span.extend(right.span);
 
             left = Expr {
                 kind: ExprKind::BinaryOp {
@@ -562,7 +540,7 @@ impl Parser {
                     right: Box::new(right),
                     op,
                 },
-                span: span.into(),
+                span,
             }
         }
 
@@ -583,10 +561,7 @@ impl Parser {
             self.consume();
 
             let right = self.parse_unary_expr()?;
-            let span = (
-                left.span.offset(),
-                (right.span.offset() - left.span.offset()) + right.span.len(),
-            );
+            let span = left.span.extend(right.span);
 
             left = Expr {
                 kind: ExprKind::BinaryOp {
@@ -594,7 +569,7 @@ impl Parser {
                     right: Box::new(right),
                     op,
                 },
-                span: span.into(),
+                span,
             }
         }
 
@@ -615,17 +590,14 @@ impl Parser {
 
                 // We should keep parsing as many unary operators as we can
                 let right = self.parse_unary_expr()?;
-                let span = (
-                    token.span.offset(),
-                    right.span.offset() - token.span.offset() + right.span.len(),
-                );
+                let span = token.span.extend(right.span);
 
                 Ok(Expr {
                     kind: ExprKind::UnaryOp {
                         expr: Box::new(right),
                         op,
                     },
-                    span: span.into(),
+                    span,
                 })
             }
             _ => self.parse_call_expr(),
@@ -667,17 +639,14 @@ impl Parser {
             self.consume();
 
             let right = self.parse_list_expr()?;
-            let span = (
-                left.span.offset(),
-                (right.span.offset() - left.span.offset()) + right.span.len(),
-            );
+            let span = left.span.extend(right.span);
 
             left = Expr {
                 kind: ExprKind::Mod {
                     module: Box::new(left),
                     item: Box::new(right),
                 },
-                span: span.into(),
+                span,
             }
         }
 
@@ -694,7 +663,7 @@ impl Parser {
         let (items, last) = self.parse_args(&TokenKind::RightBracket)?;
         let last = last.unwrap_or(left.span.offset());
 
-        let span = (left.span.offset(), last - left.span.offset()).into();
+        let span = left.span.extend(last.into());
 
         self.expect(&TokenKind::RightBracket, ParserError::ListItemsEnd { span })?;
 
@@ -774,5 +743,15 @@ impl Parser {
         };
 
         Ok(expr)
+    }
+}
+
+pub trait SourceSpanExt {
+    fn extend(&self, span: SourceSpan) -> SourceSpan;
+}
+
+impl SourceSpanExt for SourceSpan {
+    fn extend(&self, span: Self) -> Self {
+        (self.offset(), span.offset() - self.offset() + span.len()).into()
     }
 }
