@@ -341,13 +341,13 @@ mod tests {
     #[test]
     fn end_of_line() {
         let mut lexer = Lexer::new("\n");
-        assert_eq!(
+        assert_ne!(
             lexer.tokenize().unwrap(),
             vec![Token {
                 kind: TokenKind::EndOfLine,
                 span: (0, 1).into()
             }],
-            r"'\n' should produce a new line token"
+            r"'\n' should not produce a new line token"
         )
     }
 

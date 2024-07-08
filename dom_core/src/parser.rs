@@ -138,10 +138,10 @@ impl Default for Parser {
 
 impl Parser {
     #[must_use]
-    pub fn new(src: String) -> Self {
+    pub fn new(src: impl ToString) -> Self {
         Self {
             tokens: vec![].into(),
-            src,
+            src: src.to_string(),
         }
     }
 
@@ -753,5 +753,136 @@ pub trait SourceSpanExt {
 impl SourceSpanExt for SourceSpan {
     fn extend(&self, span: Self) -> Self {
         (self.offset(), span.offset() - self.offset() + span.len()).into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::lexer::RelOp;
+
+    use super::*;
+
+    trait VecExt {
+        fn to_program(self) -> Stmt;
+    }
+
+    impl VecExt for Vec<Stmt> {
+        fn to_program(self) -> Stmt {
+            Stmt::Program { body: self }
+        }
+    }
+
+    #[test]
+    fn parse_use() {
+        let src = "use foo/bar";
+        let ast = Parser::new(src)
+            .produce_ast()
+            .expect("should be able to parse ast");
+
+        assert_eq!(
+            ast,
+            vec![Stmt::Use(Use {
+                path: "foo/bar".to_string(),
+                span: (4, 7).into()
+            })]
+            .to_program()
+        )
+    }
+
+    #[test]
+    fn parse_loop() {
+        let src = "loop { break }";
+        let ast = Parser::new(src)
+            .produce_ast()
+            .expect("should be able to parse ast");
+
+        assert_eq!(
+            ast,
+            vec![Stmt::Loop(Loop {
+                body: vec![Stmt::Expr(Expr {
+                    kind: ExprKind::Break,
+                    span: (7, 5).into()
+                })],
+                span: (0, 4).into()
+            })]
+            .to_program()
+        );
+    }
+
+    #[test]
+    fn parse_func() {
+        let src = "fn foo(bar) { return }";
+        let ast = Parser::new(src)
+            .produce_ast()
+            .expect("should be able to parse ast");
+
+        assert_eq!(
+            ast,
+            vec![Stmt::Func(Func {
+                ident: "foo".to_string(),
+                params: vec!["bar".to_string()],
+                body: vec![Stmt::Expr(Expr {
+                    kind: ExprKind::Return { value: None },
+                    span: (14, 6).into()
+                })],
+                span: (3, 3).into()
+            })]
+            .to_program()
+        );
+    }
+
+    #[test]
+    fn parse_cond() {
+        let src = "if 1 < 2 { true }";
+        let ast = Parser::new(src)
+            .produce_ast()
+            .expect("should be able to parse ast");
+
+        assert_eq!(
+            ast,
+            vec![Stmt::Cond(Cond {
+                condition: Expr {
+                    kind: ExprKind::RelOp {
+                        left: Box::new(Expr {
+                            kind: ExprKind::Int(1),
+                            span: (3, 1).into()
+                        }),
+                        right: Box::new(Expr {
+                            kind: ExprKind::Int(2),
+                            span: (7, 1).into()
+                        }),
+                        op: RelOp::Less
+                    },
+                    span: (3, 5).into()
+                },
+                body: vec![Stmt::Expr(Expr {
+                    kind: ExprKind::Bool(true),
+                    span: (11, 4).into()
+                })],
+                span: (3, 5).into()
+            })]
+            .to_program()
+        );
+    }
+
+    #[test]
+    fn parse_var() {
+        let src = "let foo = 0";
+        let ast = Parser::new(src)
+            .produce_ast()
+            .expect("should be able to parse ast");
+
+        assert_eq!(
+            ast,
+            vec![Stmt::Var(Var {
+                ident: "foo".to_string(),
+                value: Box::new(Stmt::Expr(Expr {
+                    kind: ExprKind::Int(0),
+                    span: (10, 1).into()
+                })),
+                span: (4, 3).into()
+            })]
+            .to_program()
+        );
     }
 }

@@ -8,7 +8,7 @@ use crate::lexer::RelOp;
 pub type Ident = String;
 
 /// The kind of a statement.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     /// A program consisting of a sequence of statements.
     Program { body: Vec<Stmt> },
@@ -34,7 +34,7 @@ impl From<Expr> for Stmt {
 }
 
 /// A conditional declaration.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Cond {
     /// The condition to be checked.
     pub condition: Expr,
@@ -45,7 +45,7 @@ pub struct Cond {
 }
 
 /// A function declaration.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Func {
     /// The identifier of the function.
     pub ident: Ident,
@@ -58,7 +58,7 @@ pub struct Func {
 }
 
 /// A loop statement.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Loop {
     /// The value returned.
     pub body: Vec<Stmt>,
@@ -67,7 +67,7 @@ pub struct Loop {
 }
 
 /// A variable declaration.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Var {
     /// The identifier of the variable.
     pub ident: Ident,
@@ -192,27 +192,27 @@ pub enum ExprKind {
 impl fmt::Display for ExprKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExprKind::Assignment { .. } => write!(f, "Assignment"),
-            ExprKind::Pipe { .. } => write!(f, "Pipe"),
-            ExprKind::Call { .. } => write!(f, "Call"),
-            ExprKind::List { .. } => write!(f, "List"),
-            ExprKind::Str { .. } => write!(f, "Str"),
-            ExprKind::Ident { .. } => write!(f, "Ident"),
-            ExprKind::Bool { .. } => write!(f, "Bool"),
-            ExprKind::Int { .. } => write!(f, "Int"),
-            ExprKind::LogicOp { .. } => write!(f, "LogicOp"),
-            ExprKind::RelOp { .. } => write!(f, "RelOp"),
-            ExprKind::UnaryOp { .. } => write!(f, "UnaryOp"),
-            ExprKind::BinaryOp { .. } => write!(f, "BinaryOp"),
-            ExprKind::Return { .. } => write!(f, "Return"),
-            ExprKind::Continue => write!(f, "Continue"),
-            ExprKind::Break => write!(f, "Break"),
-            ExprKind::Mod { .. } => write!(f, "Mod"),
+            Self::Assignment { .. } => write!(f, "Assignment"),
+            Self::Pipe { .. } => write!(f, "Pipe"),
+            Self::Call { .. } => write!(f, "Call"),
+            Self::List { .. } => write!(f, "List"),
+            Self::Str { .. } => write!(f, "Str"),
+            Self::Ident { .. } => write!(f, "Ident"),
+            Self::Bool { .. } => write!(f, "Bool"),
+            Self::Int { .. } => write!(f, "Int"),
+            Self::LogicOp { .. } => write!(f, "LogicOp"),
+            Self::RelOp { .. } => write!(f, "RelOp"),
+            Self::UnaryOp { .. } => write!(f, "UnaryOp"),
+            Self::BinaryOp { .. } => write!(f, "BinaryOp"),
+            Self::Return { .. } => write!(f, "Return"),
+            Self::Continue => write!(f, "Continue"),
+            Self::Break => write!(f, "Break"),
+            Self::Mod { .. } => write!(f, "Mod"),
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Use {
     pub path: String,
     pub span: SourceSpan,
