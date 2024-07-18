@@ -3,7 +3,6 @@ mod environment;
 mod interpreter;
 mod lexer;
 mod parser;
-mod util;
 
 pub use ast::Expr;
 pub use environment::{BuiltinFn, BuiltinRegistry, Env, Val, ValKind};

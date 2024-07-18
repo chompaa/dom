@@ -111,11 +111,10 @@ pub enum ParserError {
         #[label("this token is not supported as a module name")]
         span: SourceSpan,
     },
-    #[error("token `{kind:?}` is unsupported")]
+    #[error("token is unsupported")]
     #[diagnostic(code(parser::unsupported_token))]
     Unsupported {
-        kind: TokenKind,
-        #[label("unsupported token")]
+        #[label("this token is unsupported")]
         span: SourceSpan,
     },
 }
@@ -125,29 +124,23 @@ enum Process {
     Push,
 }
 
-pub struct Parser {
-    tokens: VecDeque<Token>,
-    src: String,
+#[derive(Default)]
+pub struct Parser<'a> {
+    tokens: VecDeque<Token<'a>>,
+    source: &'a str,
 }
 
-impl Default for Parser {
-    fn default() -> Self {
-        Self::new(String::new())
-    }
-}
-
-impl Parser {
+impl<'a> Parser<'a> {
     #[must_use]
-    pub fn new(src: impl ToString) -> Self {
+    pub fn new(source: &'a str) -> Self {
         Self {
-            tokens: vec![].into(),
-            src: src.to_string(),
+            source,
+            ..Self::default()
         }
     }
 
     pub fn produce_ast(&mut self) -> Result<Stmt> {
-        // Retrieve tokens from the lexer
-        self.tokens = Lexer::new(self.src.clone()).tokenize()?.into();
+        self.tokens = Lexer::new(self.source).tokenize()?.into();
 
         // Build out the program body
         let body = self.process(|_| Process::Push)?;
@@ -159,7 +152,7 @@ impl Parser {
 
     fn process<F>(&mut self, mut p: F) -> Result<Vec<Stmt>>
     where
-        F: FnMut(&TokenKind) -> Process,
+        F: FnMut(&TokenKind<'a>) -> Process,
     {
         let mut body = vec![];
 
@@ -175,22 +168,19 @@ impl Parser {
         Ok(body)
     }
 
-    fn peek(&self) -> Option<&Token> {
+    fn peek(&self) -> Option<&Token<'a>> {
         self.tokens.front()
     }
 
-    fn peek_kind(&self) -> Option<&TokenKind> {
-        match self.peek() {
-            Some(token) => Some(&token.kind),
-            None => None,
-        }
+    fn peek_kind(&self) -> Option<&TokenKind<'a>> {
+        self.peek().map(|token| &token.kind)
     }
 
-    fn consume(&mut self) -> Token {
+    fn consume(&mut self) -> Token<'a> {
         self.tokens.pop_front().expect("tokens should not be empty")
     }
 
-    fn expect(&mut self, kind: &TokenKind, error: ParserError) -> Result<()> {
+    fn expect(&mut self, kind: &TokenKind<'a>, error: ParserError) -> Result<()> {
         if self.tokens.is_empty() {
             return Err(error.into());
         }
@@ -313,7 +303,7 @@ impl Parser {
         self.expect(&TokenKind::RightBrace, ParserError::FnBlockEnd { span })?;
 
         let func = Func {
-            ident,
+            ident: ident.to_string(),
             params,
             body,
             span,
@@ -322,7 +312,7 @@ impl Parser {
         Ok(func)
     }
 
-    fn parse_args(&mut self, end: &TokenKind) -> Result<(Vec<Expr>, Option<usize>)> {
+    fn parse_args(&mut self, end: &TokenKind<'a>) -> Result<(Vec<Expr>, Option<usize>)> {
         let mut args = Vec::new();
 
         if self.peek_kind() == Some(end) {
@@ -394,7 +384,7 @@ impl Parser {
         )?;
 
         let var = Var {
-            ident,
+            ident: ident.to_string(),
             value: Box::new(self.parse_expr()?.into()),
             span: ident_token.span,
         };
@@ -675,22 +665,22 @@ impl Parser {
     }
 
     fn parse_primary_expr(&mut self) -> Result<Expr> {
-        let token = self.consume();
+        let Token { kind, span } = self.consume();
 
-        let expr = match token.kind {
+        let expr = match kind {
             TokenKind::Ident(value) => Expr {
-                kind: ExprKind::Ident(value),
-                span: token.span,
+                kind: ExprKind::Ident(value.to_string()),
+                span,
             },
             TokenKind::Bool(value) => {
-                let value = match value.as_ref() {
+                let value = match value {
                     "true" => true,
                     "false" => false,
                     _ => unreachable!("`Bool` token should have value `true` or `false`"),
                 };
                 Expr {
                     kind: ExprKind::Bool(value),
-                    span: token.span,
+                    span,
                 }
             }
             TokenKind::Int(value) => Expr {
@@ -699,11 +689,11 @@ impl Parser {
                         .parse::<i32>()
                         .expect("`Int` token should be parsed as an `i32`"),
                 ),
-                span: token.span,
+                span,
             },
             TokenKind::Str(value) => Expr {
-                kind: ExprKind::Str(value),
-                span: token.span,
+                kind: ExprKind::Str(value.to_string()),
+                span,
             },
             TokenKind::LeftParen => {
                 let expr = self.parse_expr()?;
@@ -719,7 +709,7 @@ impl Parser {
                     let len = expr.span.len();
                     (Some(Box::new(expr)), len)
                 };
-                let span = (token.span.offset(), len + token.span.len());
+                let span = (span.offset(), len + span.len());
                 Expr {
                     kind: ExprKind::Return { value },
                     span: span.into(),
@@ -727,19 +717,13 @@ impl Parser {
             }
             TokenKind::Continue => Expr {
                 kind: ExprKind::Continue,
-                span: token.span,
+                span,
             },
             TokenKind::Break => Expr {
                 kind: ExprKind::Break,
-                span: token.span,
+                span,
             },
-            _ => {
-                return Err(ParserError::Unsupported {
-                    kind: token.kind,
-                    span: token.span,
-                }
-                .into())
-            }
+            _ => return Err(ParserError::Unsupported { span }.into()),
         };
 
         Ok(expr)

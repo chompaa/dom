@@ -1,7 +1,7 @@
+use std::{iter::Peekable, str::Chars};
+
 use miette::{Diagnostic, Result, SourceSpan};
 use thiserror::Error;
-
-use crate::util::is_alpha;
 
 #[derive(Error, Diagnostic, Debug)]
 pub enum LexerError {
@@ -9,8 +9,6 @@ pub enum LexerError {
     InvalidTokenKind(char),
     #[error("str was never terminated")]
     UnterminatedString,
-    #[error("invalid escape sequence `{0}`")]
-    InvalidEscapeSequence(char),
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -23,19 +21,19 @@ pub enum RelOp {
     GreaterEq,
 }
 
-#[derive(PartialEq, Debug)]
-pub struct Token {
-    pub kind: TokenKind,
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub struct Token<'a> {
+    pub kind: TokenKind<'a>,
     pub span: SourceSpan,
 }
 
-#[derive(PartialEq, Debug, Clone)]
-pub enum TokenKind {
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum TokenKind<'a> {
     // Literals
-    Bool(String),
-    Ident(String),
-    Int(String),
-    Str(String),
+    Bool(&'a str),
+    Ident(&'a str),
+    Int(&'a str),
+    Str(&'a str),
 
     // Keywords
     Let,
@@ -76,29 +74,31 @@ pub enum TokenKind {
     EndOfFile,
 }
 
-#[derive(Default)]
-pub struct Lexer {
-    buffer: Vec<char>,
-    position: usize,
+pub struct Lexer<'a> {
+    source: &'a str,
+    chars: Peekable<Chars<'a>>,
     cursor: usize,
-    ch: char,
+    current_char: Option<char>,
 }
 
-impl Lexer {
+impl<'a> Lexer<'a> {
     /// Constructs a new [`Lexer`] instance from a source.
-    pub fn new(source: impl Into<String>) -> Self {
-        let buffer = source.into().chars().collect();
-        let mut lexer = Self {
-            buffer,
-            ..Self::default()
-        };
-        lexer.read_char();
-        lexer
+    pub fn new(source: &'a str) -> Self {
+        let mut chars = source.chars().peekable();
+        // The current character should be initialized to the first character.
+        let current_char = chars.next();
+
+        Self {
+            source,
+            chars,
+            cursor: 0,
+            current_char,
+        }
     }
 
-    /// Tokenizes the current buffer.
-    pub fn tokenize(&mut self) -> Result<Vec<Token>> {
-        let mut tokens: Vec<Token> = vec![];
+    /// Tokenizes the current source.
+    pub fn tokenize(&mut self) -> Result<Vec<Token<'a>>> {
+        let mut tokens = vec![];
 
         loop {
             let token = self.next()?;
@@ -111,35 +111,25 @@ impl Lexer {
         Ok(tokens)
     }
 
-    fn eof(&self) -> bool {
-        self.cursor >= self.buffer.len()
-    }
-
     /// Reads the character under the cursor without advancing the cursor and
     /// updating the current character.
-    fn peek_char(&mut self) -> char {
-        if self.eof() {
-            '\0'
-        } else {
-            self.buffer[self.cursor]
-        }
+    fn peek_char(&mut self) -> Option<&char> {
+        self.chars.peek()
     }
 
     /// Reads the character under the cursor, advances the cursor, and
     /// updates the current character.
     fn read_char(&mut self) {
-        if self.eof() {
-            self.ch = '\0';
-        } else {
-            self.ch = self.buffer[self.cursor];
-        }
-        self.position = self.cursor;
-        self.cursor += 1;
+        self.current_char = self.chars.next();
+        // We choose `1` as the default here in the case of the last token, so that the
+        // cursor is properly positioned.
+        self.cursor += self.current_char.map_or(1, char::len_utf8);
     }
 
+    /// Reads a comment, leaving the cursor at the last character of the comment.
     fn read_comment(&mut self) {
-        loop {
-            if self.ch == '\n' {
+        while let Some(ch) = self.peek_char() {
+            if *ch == '\n' {
                 break;
             }
             self.read_char();
@@ -147,130 +137,140 @@ impl Lexer {
     }
 
     /// Reads an identifier, leaving the cursor at the last character of the identifier.
-    fn read_ident(&mut self) -> String {
-        let start = self.position;
+    fn read_ident(&mut self) -> &'a str {
+        let start = self.cursor;
 
-        loop {
-            if is_alpha(self.peek_char()) {
+        while let Some(ch) = self.peek_char() {
+            if ch.is_ident() {
                 self.read_char();
             } else {
                 break;
             }
         }
 
-        self.buffer[start..self.cursor].iter().collect::<String>()
+        &self.source[start..=self.cursor]
     }
 
     /// Reads a number, leaving the cursor at the last character of the number.
-    fn read_number(&mut self) -> String {
-        let start = self.position;
+    fn read_number(&mut self) -> &'a str {
+        let start = self.cursor;
 
-        loop {
-            if self.peek_char().is_ascii_digit() {
+        while let Some(ch) = self.peek_char() {
+            if ch.is_ascii_digit() {
                 self.read_char();
             } else {
                 break;
             }
         }
 
-        self.buffer[start..self.cursor].iter().collect::<String>()
+        &self.source[start..=self.cursor]
     }
 
-    fn read_str(&mut self) -> Result<String> {
-        let mut result = String::new();
+    /// Reads a string, leaving the cursor at the last character of the string.
+    fn read_str(&mut self) -> Result<&'a str> {
+        let start = self.cursor;
         // Consume opening quote.
         self.read_char();
 
-        while self.ch != '"' {
-            match self.ch {
+        while let Some(ch) = self.current_char {
+            if ch == '"' {
+                break;
+            }
+            match ch {
                 '\0' => return Err(LexerError::UnterminatedString.into()),
                 '\\' => {
                     // Read escape char.
                     self.read_char();
-                    match self.ch {
-                        '"' => result.push('"'),
-                        '\\' => result.push('\\'),
-                        'n' => result.push('\n'),
-                        't' => result.push('\t'),
-                        'r' => result.push('\r'),
-                        _ => return Err(LexerError::InvalidEscapeSequence(self.ch).into()),
-                    }
+                    // Handle escape sequences
                 }
-                _ => result.push(self.ch),
+                _ => {}
             }
             self.read_char();
         }
 
-        Ok(result)
+        // Consume closing quote.
+        self.read_char();
+        // Exclude the closing quote in the slice.
+        Ok(&self.source[start..self.cursor])
     }
 
     /// Consumes all whitespace characters until a non-whitespace character is read.
     fn consume_whitespace(&mut self) {
-        while self.ch == ' ' {
+        while let Some(ch) = self.current_char {
+            if !ch.is_whitespace() {
+                break;
+            }
             self.read_char();
         }
     }
 
     /// Tokenizes the current character(s) and advances the cursor.
-    fn next(&mut self) -> Result<Token> {
+    fn next(&mut self) -> Result<Token<'a>> {
         self.consume_whitespace();
 
         // Record the start position.
         let start = self.cursor;
 
-        let kind = match self.ch {
+        let Some(ch) = self.current_char else {
+            return Ok(Token {
+                kind: TokenKind::EndOfFile,
+                span: (0, 0).into(),
+            });
+        };
+
+        let kind = match ch {
             '\0' => TokenKind::EndOfFile,
             '&' => match self.peek_char() {
-                '&' => {
+                Some('&') => {
                     self.read_char();
                     TokenKind::And
                 }
-                _ => return Err(LexerError::InvalidTokenKind(self.ch).into()),
+                _ => return Err(LexerError::InvalidTokenKind('&').into()),
             },
             '|' => match self.peek_char() {
-                '|' => {
+                Some('|') => {
                     self.read_char();
                     TokenKind::Or
                 }
-                '>' => {
+                Some('>') => {
                     self.read_char();
                     TokenKind::Pipe
                 }
-                _ => return Err(LexerError::InvalidTokenKind(self.ch).into()),
+                _ => return Err(LexerError::InvalidTokenKind('|').into()),
             },
             '+' => TokenKind::Plus,
             '-' => TokenKind::Minus,
             '*' => TokenKind::Star,
             '/' => match self.peek_char() {
-                '/' => {
+                Some('/') => {
                     self.read_comment();
                     return self.next();
                 }
                 _ => TokenKind::Slash,
             },
             '=' => match self.peek_char() {
-                '=' => {
+                Some('=') => {
                     self.read_char();
                     TokenKind::RelOp(RelOp::Eq)
                 }
                 _ => TokenKind::Assignment,
             },
             '!' => match self.peek_char() {
-                '=' => {
+                Some('=') => {
                     self.read_char();
                     TokenKind::RelOp(RelOp::NotEq)
                 }
                 _ => TokenKind::Bang,
             },
             '<' => match self.peek_char() {
-                '=' => {
+                Some('=') => {
                     self.read_char();
                     TokenKind::RelOp(RelOp::LessEq)
                 }
                 _ => TokenKind::RelOp(RelOp::Less),
             },
             '>' => match self.peek_char() {
-                '=' => {
+                Some('=') => {
                     self.read_char();
                     TokenKind::RelOp(RelOp::GreaterEq)
                 }
@@ -286,29 +286,27 @@ impl Lexer {
             '.' => TokenKind::Dot,
             '\n' => TokenKind::EndOfLine,
             '"' => TokenKind::Str(self.read_str()?),
-            _ => {
-                if is_alpha(self.ch) {
-                    let ident = self.read_ident();
+            '0'..='9' => TokenKind::Int(self.read_number()),
+            ch if ch.is_ident() => {
+                let ident = self.read_ident();
 
-                    match ident.as_str() {
-                        // Keywords
-                        "let" => TokenKind::Let,
-                        "if" => TokenKind::Cond,
-                        "fn" => TokenKind::Func,
-                        "return" => TokenKind::Return,
-                        "loop" => TokenKind::Loop,
-                        "continue" => TokenKind::Continue,
-                        "break" => TokenKind::Break,
-                        "use" => TokenKind::Use,
-                        // Misc
-                        "true" | "false" => TokenKind::Bool(ident),
-                        _ => TokenKind::Ident(ident),
-                    }
-                } else if self.ch.is_ascii_digit() {
-                    TokenKind::Int(self.read_number())
-                } else {
-                    return Err(LexerError::InvalidTokenKind(self.ch).into());
+                match ident {
+                    // Keywords
+                    "let" => TokenKind::Let,
+                    "if" => TokenKind::Cond,
+                    "fn" => TokenKind::Func,
+                    "return" => TokenKind::Return,
+                    "loop" => TokenKind::Loop,
+                    "continue" => TokenKind::Continue,
+                    "break" => TokenKind::Break,
+                    "use" => TokenKind::Use,
+                    // Misc
+                    "true" | "false" => TokenKind::Bool(ident),
+                    ident => TokenKind::Ident(ident),
                 }
+            }
+            ch => {
+                return Err(LexerError::InvalidTokenKind(ch).into());
             }
         };
 
@@ -318,15 +316,26 @@ impl Lexer {
             return self.next();
         }
 
-        let span = SourceSpan::new((start - 1).into(), self.cursor - start);
+        let span = SourceSpan::new(start.into(), self.cursor - start);
         let token = Token { kind, span };
         Ok(token)
+    }
+}
+
+trait CharExt {
+    fn is_ident(&self) -> bool;
+}
+
+impl CharExt for char {
+    fn is_ident(&self) -> bool {
+        self.is_alphabetic() || *self == '_'
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn empty() {
@@ -358,7 +367,7 @@ mod tests {
         assert_eq!(
             lexer.tokenize().unwrap(),
             vec![Token {
-                kind: TokenKind::Ident(alphabet.to_string()),
+                kind: TokenKind::Ident(alphabet),
                 span: (0, 52).into()
             }],
             "All alphabetical characters should be detected"
@@ -372,9 +381,53 @@ mod tests {
         assert_eq!(
             lexer.tokenize().unwrap(),
             vec![Token {
-                kind: TokenKind::Int(digits.to_string()),
+                kind: TokenKind::Int(digits),
                 span: (0, 10).into()
             }],
+            "All numerical characters should be detected"
+        )
+    }
+
+    #[test]
+    fn multiple_types() {
+        let source = "if foo <= bar { !foo }";
+        let mut lexer = Lexer::new(source);
+        assert_eq!(
+            lexer.tokenize().unwrap(),
+            vec![
+                Token {
+                    kind: TokenKind::Cond,
+                    span: (0, 2).into()
+                },
+                Token {
+                    kind: TokenKind::Ident("foo"),
+                    span: (3, 3).into()
+                },
+                Token {
+                    kind: TokenKind::RelOp(RelOp::LessEq),
+                    span: (7, 2).into()
+                },
+                Token {
+                    kind: TokenKind::Ident("bar"),
+                    span: (10, 3).into()
+                },
+                Token {
+                    kind: TokenKind::LeftBrace,
+                    span: (14, 1).into()
+                },
+                Token {
+                    kind: TokenKind::Bang,
+                    span: (16, 1).into()
+                },
+                Token {
+                    kind: TokenKind::Ident("foo"),
+                    span: (17, 3).into()
+                },
+                Token {
+                    kind: TokenKind::RightBrace,
+                    span: (21, 1).into()
+                },
+            ],
             "All numerical characters should be detected"
         )
     }

@@ -30,7 +30,7 @@ impl UseHook for CliUseHook {
             return Ok(None);
         };
 
-        let program = Parser::new(source.to_string()).produce_ast()?;
+        let program = Parser::new(&source).produce_ast()?;
 
         let mut env = env.lock().unwrap();
         let mod_env = Env::with_builtins(Arc::clone(env.builtins()));

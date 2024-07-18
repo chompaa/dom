@@ -28,7 +28,7 @@ pub fn init_miette_hook() {
 pub fn interpret(source: &str) -> String {
     let env = Env::new();
 
-    let (ast, program) = match Parser::new(source.to_string()).produce_ast() {
+    let (ast, program) = match Parser::new(source).produce_ast() {
         Ok(program) => (format!("{program:#?}"), program),
         Err(error) => {
             let error = error.with_source_code(source.to_string());

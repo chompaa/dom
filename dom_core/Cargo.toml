@@ -6,3 +6,6 @@ edition = "2021"
 [dependencies]
 thiserror.workspace = true
 miette.workspace = true
+
+[dev-dependencies]
+pretty_assertions = "1.4.0"

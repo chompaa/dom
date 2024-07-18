@@ -2,7 +2,7 @@ mod hooks;
 
 use dom_core::{Env, Interpreter, Parser, Val};
 
-use ::std::{
+use std::{
     fs::read_to_string,
     io::{self, Write},
     sync::{Arc, Mutex},
@@ -18,7 +18,7 @@ struct Args {
 
 fn result(source: &str, env: &Arc<Mutex<Env>>) -> Result<Val> {
     (|| -> Result<Val> {
-        let program = Parser::new(source.to_string()).produce_ast()?;
+        let program = Parser::new(source).produce_ast()?;
         Interpreter::new::<hooks::CliUseHook, hooks::CliModuleHook>().eval(program, env)
     })()
     .map_err(|error| error.with_source_code(source.to_string()))
