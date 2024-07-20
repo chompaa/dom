@@ -141,6 +141,7 @@ impl<'a> Lexer<'a> {
             }
             self.read_char();
         }
+        self.read_char();
     }
 
     /// Reads an identifier, leaving the cursor at the last character of the identifier.
@@ -429,6 +430,20 @@ mod tests {
                 },
             ],
             "Strings should read properly"
+        )
+    }
+
+    #[test]
+    fn comment() {
+        let source = "// foo = bar.baz(-1, 0)\nfoo";
+        let mut lexer = Lexer::new(source);
+        assert_eq!(
+            lexer.tokenize().unwrap(),
+            vec![Token {
+                kind: TokenKind::Ident("foo"),
+                span: (24, 3).into()
+            }],
+            "Comments should read properly"
         )
     }
 
