@@ -5,10 +5,17 @@ use thiserror::Error;
 
 #[derive(Error, Diagnostic, Debug)]
 pub enum LexerError {
-    #[error("token `{0}` is invalid")]
-    InvalidTokenKind(char),
+    #[error("token `{ch}` is invalid")]
+    InvalidTokenKind {
+        ch: char,
+        #[label("this token is invalid")]
+        span: SourceSpan,
+    },
     #[error("str was never terminated")]
-    UnterminatedString,
+    UnterminatedString {
+        #[label("string beginning here never terminated")]
+        span: SourceSpan,
+    },
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -172,26 +179,23 @@ impl<'a> Lexer<'a> {
         // Consume opening quote.
         self.read_char();
 
-        while let Some(ch) = self.current_char {
-            if ch == '"' {
-                break;
-            }
-            match ch {
-                '\0' => return Err(LexerError::UnterminatedString.into()),
-                '\\' => {
-                    // Read escape char.
-                    self.read_char();
-                    // Handle escape sequences
+        loop {
+            match self.current_char {
+                Some(ch) if ch == '"' => {
+                    break;
                 }
-                _ => {}
+                None => {
+                    return Err(LexerError::UnterminatedString {
+                        span: (start, 1).into(),
+                    }
+                    .into())
+                }
+                _ => self.read_char(),
             }
-            self.read_char();
         }
 
-        // Consume closing quote.
-        self.read_char();
-        // Exclude the closing quote in the slice.
-        Ok(&self.source[start..self.cursor])
+        // Exclude the start and closing quotes in the slice.
+        Ok(&self.source[start + 1..self.cursor])
     }
 
     /// Consumes all whitespace characters until a non-whitespace character is read.
@@ -225,7 +229,13 @@ impl<'a> Lexer<'a> {
                     self.read_char();
                     TokenKind::And
                 }
-                _ => return Err(LexerError::InvalidTokenKind('&').into()),
+                _ => {
+                    return Err(LexerError::InvalidTokenKind {
+                        ch: '&',
+                        span: (start + 1, 1).into(),
+                    }
+                    .into())
+                }
             },
             '|' => match self.peek_char() {
                 Some('|') => {
@@ -236,7 +246,13 @@ impl<'a> Lexer<'a> {
                     self.read_char();
                     TokenKind::Pipe
                 }
-                _ => return Err(LexerError::InvalidTokenKind('|').into()),
+                _ => {
+                    return Err(LexerError::InvalidTokenKind {
+                        ch: '|',
+                        span: (start + 1, 1).into(),
+                    }
+                    .into())
+                }
             },
             '+' => TokenKind::Plus,
             '-' => TokenKind::Minus,
@@ -306,7 +322,11 @@ impl<'a> Lexer<'a> {
                 }
             }
             ch => {
-                return Err(LexerError::InvalidTokenKind(ch).into());
+                return Err(LexerError::InvalidTokenKind {
+                    ch,
+                    span: (start, 1).into(),
+                }
+                .into());
             }
         };
 
@@ -385,6 +405,30 @@ mod tests {
                 span: (0, 10).into()
             }],
             "All numerical characters should be detected"
+        )
+    }
+
+    #[test]
+    fn string() {
+        let source = r#"("foo")"#;
+        let mut lexer = Lexer::new(source);
+        assert_eq!(
+            lexer.tokenize().unwrap(),
+            vec![
+                Token {
+                    kind: TokenKind::LeftParen,
+                    span: (0, 1).into()
+                },
+                Token {
+                    kind: TokenKind::Str("foo"),
+                    span: (1, 5).into()
+                },
+                Token {
+                    kind: TokenKind::RightParen,
+                    span: (6, 1).into()
+                },
+            ],
+            "Strings should read properly"
         )
     }
 
