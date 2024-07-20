@@ -349,7 +349,7 @@ impl Interpreter {
         }
 
         for (param, arg) in params.into_iter().zip(args.into_iter()) {
-            env.lock().unwrap().declare(&param, arg, span)?;
+            env.lock().unwrap().declare_unchecked(&param, arg);
         }
 
         let mut last = None;

@@ -41,7 +41,7 @@ impl UseHook for CliUseHook {
 
         let _ = interpreter.eval(program, &mod_env);
 
-        env.declare_unchecked(ident.to_string(), ValKind::Mod(mod_env).into());
+        env.declare_unchecked(ident, ValKind::Mod(mod_env).into());
 
         Ok(Some(()))
     }

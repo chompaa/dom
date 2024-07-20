@@ -207,7 +207,7 @@ impl Env {
             _ => {
                 let mod_env = Env::new();
                 let value = ValKind::Mod(Arc::clone(&mod_env));
-                self.declare_unchecked(path.to_string(), value.into());
+                self.declare_unchecked(path, value.into());
                 mod_env
             }
         };
@@ -222,6 +222,7 @@ impl Env {
     ///
     /// Returns an error if a variable with the same name already exists in this environment.
     pub fn declare(&mut self, name: &str, value: Val, span: SourceSpan) -> Result<Val> {
+        eprintln!("Trying to declare {name} with value {value}");
         // Check if a variable with the same name already exists in this environment.
         if self.values.contains_key(name) {
             return Err(EnvError::IdentifierAlreadyExists { span }.into());
@@ -238,8 +239,9 @@ impl Env {
     /// might exist.
     ///
     /// Does not return anything.
-    pub fn declare_unchecked(&mut self, name: String, value: Val) {
-        self.values.insert(name.to_string(), value.with_ident(name));
+    pub fn declare_unchecked(&mut self, name: &str, value: Val) {
+        self.values
+            .insert(name.to_string(), value.with_ident(name.to_string()));
     }
 
     /// Assigns a new value to the variable with the given name.
