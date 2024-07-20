@@ -1,3 +1,5 @@
+use dom_macros::expected_args;
+
 use super::*;
 
 #[derive(Debug, Default)]
@@ -8,18 +10,8 @@ impl BuiltinFn for GetFn {
         "get"
     }
 
+    #[expected_args(List(list), Int(index))]
     fn run(&self, args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
-        let [Val {
-            kind: ValKind::List(list),
-            ..
-        }, Val {
-            kind: ValKind::Int(index),
-            ..
-        }] = &args[..2]
-        else {
-            return None;
-        };
-
         let index = index.to_wrapped_index(list.len());
         list.get(index).cloned()
     }
@@ -33,27 +25,14 @@ impl BuiltinFn for SetFn {
         "set"
     }
 
-    fn run(&self, args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
-        let [Val {
-            ident,
-            kind: ValKind::List(list),
-        }, Val {
-            kind: ValKind::Int(index),
-            ..
-        }, value] = &args[..3]
-        else {
-            return None;
-        };
-
+    #[expected_args(List(list), Int(index), Val(value))]
+    fn run(&self, args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
         let mut list = list.clone();
+
         let index = index.to_wrapped_index(list.len());
         list[index] = value.clone();
 
-        let Some(ident) = ident else {
-            return Some(list.into());
-        };
-
-        Some(Env::assign_unchecked(env, ident, list.into()))
+        Some(list.into())
     }
 }
 
@@ -65,23 +44,13 @@ impl BuiltinFn for PushFn {
         "push"
     }
 
-    fn run(&self, args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
-        let [Val {
-            ident,
-            kind: ValKind::List(list),
-        }, value] = &args[..2]
-        else {
-            return None;
-        };
-
+    #[expected_args(List(list), Val(value))]
+    fn run(&self, args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
         let mut list = list.clone();
+
         list.push(value.clone());
 
-        let Some(ident) = ident else {
-            return Some(list.into());
-        };
-
-        Some(Env::assign_unchecked(env, ident, list.into()))
+        Some(list.into())
     }
 }
 
@@ -93,27 +62,14 @@ impl BuiltinFn for PopFn {
         "pop"
     }
 
-    fn run(&self, args: &[Val], env: &Arc<Mutex<Env>>) -> Option<Val> {
-        let [Val {
-            ident,
-            kind: ValKind::List(list),
-        }, Val {
-            kind: ValKind::Int(index),
-            ..
-        }] = &args[..2]
-        else {
-            return None;
-        };
-
+    #[expected_args(List(list), Int(index))]
+    fn run(&self, args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
         let mut list = list.clone();
+
         let index = index.to_wrapped_index(list.len());
         list.remove(index);
 
-        let Some(ident) = ident else {
-            return Some(list.into());
-        };
-
-        Some(Env::assign_unchecked(env, ident, list.into()))
+        Some(list.into())
     }
 }
 
@@ -125,15 +81,8 @@ impl BuiltinFn for LenFn {
         "len"
     }
 
+    #[expected_args(List(list))]
     fn run(&self, args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
-        let Val {
-            kind: ValKind::List(list),
-            ..
-        } = &args[0]
-        else {
-            return None;
-        };
-
         let len = list.len();
 
         Some(ValKind::Int(len as i32).into())

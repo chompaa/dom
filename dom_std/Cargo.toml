@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 dom_core = { path = "../dom_core/" }
+dom_macros = { path = "../dom_macros/" }

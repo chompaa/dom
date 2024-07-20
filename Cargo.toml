@@ -1,5 +1,5 @@
 [workspace]
-members = ["dom_core", "dom_cli", "dom_wasm", "dom_std"]
+members = ["dom_core", "dom_cli", "dom_wasm", "dom_std", "dom_macros"]
 resolver = "2"
 
 [workspace.dependencies]

@@ -1,3 +1,5 @@
+use dom_macros::expected_args;
+
 use super::*;
 
 #[derive(Debug, Default)]
@@ -8,16 +10,9 @@ impl BuiltinFn for LenFn {
         "len"
     }
 
+    #[expected_args(Str(string))]
     fn run(&self, args: &[Val], _: &Arc<Mutex<Env>>) -> Option<Val> {
-        let [Val {
-            kind: ValKind::Str(str),
-            ..
-        }] = &args[..1]
-        else {
-            return None;
-        };
-
-        let value = ValKind::Int(str.len() as i32);
+        let value = ValKind::Int(string.len() as i32);
         Some(value.into())
     }
 }
