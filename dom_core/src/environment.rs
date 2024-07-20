@@ -11,7 +11,7 @@ use std::{
 use crate::ast::{Ident, Stmt};
 
 #[derive(Error, Diagnostic, Debug)]
-pub enum EnvError {
+enum EnvError {
     #[error("identifier cannot be redeclared")]
     #[diagnostic(code(environment::identifier_already_exists))]
     IdentifierAlreadyExists {
@@ -50,7 +50,7 @@ impl Val {
     };
 
     #[must_use]
-    pub fn with_ident(mut self, ident: Ident) -> Self {
+    fn with_ident(mut self, ident: Ident) -> Self {
         self.ident = Some(ident);
         self
     }

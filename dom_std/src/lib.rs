@@ -1,9 +1,12 @@
 mod list;
 mod str;
 
-use dom_core::{BuiltinFn, Env, ModuleHook, Val, ValKind};
+use dom_core::{
+    environment::{BuiltinFn, Env, Val, ValKind},
+    interpreter::ModuleHook,
+};
 
-use ::std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
 pub struct StdModule;

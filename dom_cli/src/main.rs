@@ -1,6 +1,10 @@
 mod hooks;
 
-use dom_core::{Env, Interpreter, Parser, Val};
+use dom_core::{
+    environment::{Env, Val},
+    interpreter::Interpreter,
+    parser::Parser,
+};
 
 use std::{
     fs::read_to_string,

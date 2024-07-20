@@ -1,4 +1,8 @@
-use dom_core::{BuiltinFn, Env, Interpreter, ModuleHook, Parser, UseHook, Val, ValKind};
+use dom_core::{
+    environment::{BuiltinFn, Env, Val, ValKind},
+    interpreter::{Interpreter, ModuleHook, UseHook},
+    parser::Parser,
+};
 use dom_std::StdModule;
 
 use std::{

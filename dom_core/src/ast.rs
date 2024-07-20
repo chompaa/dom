@@ -5,7 +5,7 @@ use miette::SourceSpan;
 use crate::lexer::RelOp;
 
 /// An identifier (e.g. a variable name).
-pub type Ident = String;
+pub(crate) type Ident = String;
 
 /// The kind of a statement.
 #[derive(Debug, Clone, PartialEq)]
@@ -37,44 +37,44 @@ impl From<Expr> for Stmt {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Cond {
     /// The condition to be checked.
-    pub condition: Expr,
+    pub(crate) condition: Expr,
     /// The body of the conditional to be executed if the condition succeeds.
-    pub body: Vec<Stmt>,
+    pub(crate) body: Vec<Stmt>,
     /// The span of the condition.
-    pub span: SourceSpan,
+    pub(crate) span: SourceSpan,
 }
 
 /// A function declaration.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Func {
     /// The identifier of the function.
-    pub ident: Ident,
+    pub(crate) ident: Ident,
     /// The parameters of the function.
-    pub params: Vec<Ident>,
+    pub(crate) params: Vec<Ident>,
     /// The body of the function.
-    pub body: Vec<Stmt>,
+    pub(crate) body: Vec<Stmt>,
     /// The span of the function identifier.
-    pub span: SourceSpan,
+    pub(crate) span: SourceSpan,
 }
 
 /// A loop statement.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Loop {
     /// The value returned.
-    pub body: Vec<Stmt>,
+    pub(crate) body: Vec<Stmt>,
     /// The span of the loop keyword.
-    pub span: SourceSpan,
+    pub(crate) span: SourceSpan,
 }
 
 /// A variable declaration.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Var {
     /// The identifier of the variable.
-    pub ident: Ident,
+    pub(crate) ident: Ident,
     /// The value of the variable.
-    pub value: Box<Stmt>,
+    pub(crate) value: Box<Stmt>,
     /// The span of the variable identifier.
-    pub span: SourceSpan,
+    pub(crate) span: SourceSpan,
 }
 
 /// Logical operators.
@@ -104,8 +104,8 @@ pub enum UnaryOp {
 /// An expression in the abstract syntax tree.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expr {
-    pub kind: ExprKind,
-    pub span: SourceSpan,
+    pub(crate) kind: ExprKind,
+    pub(crate) span: SourceSpan,
 }
 
 /// The kind of expression.
@@ -214,6 +214,6 @@ impl fmt::Display for ExprKind {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Use {
-    pub path: String,
-    pub span: SourceSpan,
+    pub(crate) path: String,
+    pub(crate) span: SourceSpan,
 }

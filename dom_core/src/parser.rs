@@ -23,7 +23,7 @@ use crate::ast::{
 use crate::lexer::{Lexer, Token, TokenKind};
 
 #[derive(Error, Diagnostic, Debug)]
-pub enum ParserError {
+pub(crate) enum ParserError {
     #[error("expected left brace `{{` following conditional statement")]
     #[diagnostic(code(parser::cond_block_begin))]
     CondBlockBegin {

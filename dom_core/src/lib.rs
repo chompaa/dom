@@ -1,10 +1,5 @@
-mod ast;
-mod environment;
-mod interpreter;
-mod lexer;
-mod parser;
-
-pub use ast::Expr;
-pub use environment::{BuiltinFn, BuiltinRegistry, Env, Val, ValKind};
-pub use interpreter::{Interpreter, InterpreterError, ModuleHook, UseHook};
-pub use parser::Parser;
+pub mod ast;
+pub mod environment;
+pub mod interpreter;
+pub mod lexer;
+pub mod parser;

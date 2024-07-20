@@ -1,6 +1,6 @@
 mod hooks;
 
-use dom_core::{Env, Interpreter, Parser};
+use dom_core::{environment::Env, interpreter::Interpreter, parser::Parser};
 
 use wasm_bindgen::prelude::*;
 use web_sys::console;

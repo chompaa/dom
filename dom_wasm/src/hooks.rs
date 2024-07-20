@@ -1,4 +1,7 @@
-use dom_core::{BuiltinFn, Env, Interpreter, ModuleHook, UseHook, Val};
+use dom_core::{
+    environment::{BuiltinFn, Env, Val},
+    interpreter::{Interpreter, ModuleHook, UseHook},
+};
 use dom_std::StdModule;
 
 use std::sync::{Arc, Mutex};
